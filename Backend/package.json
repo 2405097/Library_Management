@@ -1,0 +1,20 @@
+{
+  "name": "library-management",
+  "version": "1.0.0",
+  "description": "A library management system created using the PERN stack",
+  "license": "ISC",
+  "author": "Wasee&Nira",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "nodemon": "^3.1.14",
+    "pg": "^8.23.0"
+  }
+}
