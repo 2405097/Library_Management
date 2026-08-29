@@ -4,10 +4,14 @@ import {
   getUser, 
   createNewUser, 
   updateUserDetails, 
-  deleteUserDetails 
-} from '../controllers/user.controller.js';
+  deleteUserDetails,
+  loginUser 
+} from '../Controllers/user.controller.js';
 
 const router = express.Router();
+
+// POST /api/users/login - Login user
+router.post('/login', loginUser);
 
 // GET /api/users - Get all users
 router.get('/', getUsers);

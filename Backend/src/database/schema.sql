@@ -1,0 +1,92 @@
+CREATE TABLE USERS (
+  "userID" SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL CHECK(char_length(name) >= 1),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  phone VARCHAR(20),
+  address VARCHAR(255),
+  role VARCHAR(10) CHECK (role IN ('MEMBER', 'STAFF', 'ADMIN')),
+  "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE PUBLISHER (
+  "publisherID" SERIAL PRIMARY KEY,
+  "publisherName" VARCHAR(255) NOT NULL,
+  address VARCHAR(255),
+  "contactInfo" VARCHAR(100)
+);
+
+CREATE TABLE AUTHOR (
+  "authorID" SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  biography TEXT,
+  nationality VARCHAR(100),
+  date_of_birth DATE
+);
+
+CREATE TABLE CREDENTIALS (
+  "userID" INT PRIMARY KEY REFERENCES USERS("userID") ON DELETE CASCADE,
+  username VARCHAR(100) UNIQUE,
+  "passHash" VARCHAR(255) NOT NULL,
+  "lastLogin" TIMESTAMP WITH TIME ZONE
+);
+
+-- Updated BOOK table without direct authorID foreign key
+CREATE TABLE BOOK (
+  "bookID" SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  genre VARCHAR(100),
+  avg_rating NUMERIC(3, 2) DEFAULT 0.0 CHECK (avg_rating >= 0.0 AND avg_rating <= 5.0),
+  language VARCHAR(50),
+  price NUMERIC(10, 2) CHECK (price >= 0),
+  "ISBN" VARCHAR(20) UNIQUE,
+  edition VARCHAR(50),
+  "publicationYear" INT,
+  book_copy INT DEFAULT 1 CHECK (book_copy >= 0),
+  "totalCopies" INT DEFAULT 1 CHECK ("totalCopies" >= 0),
+  "availableCopies" INT DEFAULT 1 CHECK ("availableCopies" >= 0),
+  "publisherID" INT REFERENCES PUBLISHER("publisherID") ON DELETE SET NULL
+);
+
+CREATE TABLE LIBRARY_REVIEW (
+  "libReviewID" SERIAL PRIMARY KEY,
+  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  "reportDetails" TEXT,
+  "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "userID" INT NOT NULL REFERENCES USERS("userID") ON DELETE CASCADE
+);
+
+-- Junction / Bridge Table for Book <-> Author (Many-to-Many)
+CREATE TABLE BOOK_AUTHOR (
+  "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE CASCADE,
+  "authorID" INT NOT NULL REFERENCES AUTHOR("authorID") ON DELETE CASCADE,
+  PRIMARY KEY ("bookID", "authorID")
+);
+
+CREATE TABLE BORROW_RECORD (
+  "borrowID" SERIAL PRIMARY KEY,
+  "borrowDate" DATE NOT NULL DEFAULT CURRENT_DATE,
+  "dueDate" DATE NOT NULL,
+  "returnDate" DATE,
+  "delayFee" NUMERIC(10, 2) DEFAULT 0.0 CHECK ("delayFee" >= 0),
+  status VARCHAR(20) DEFAULT 'BORROWED' CHECK (status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')),
+  "userID" INT NOT NULL REFERENCES USERS("userID") ON DELETE CASCADE,
+  "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE RESTRICT
+);
+
+CREATE TABLE "ORDER" (
+  "purchaseNo" SERIAL PRIMARY KEY,
+  "orderDate" DATE NOT NULL DEFAULT CURRENT_DATE,
+  price NUMERIC(10, 2) CHECK (price >= 0),
+  quantity INT DEFAULT 1 CHECK (quantity > 0),
+  "userID" INT NOT NULL REFERENCES USERS("userID") ON DELETE CASCADE,
+  "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE RESTRICT
+);
+
+CREATE TABLE BOOK_REVIEW (
+  "reviewID" SERIAL PRIMARY KEY,
+  rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment TEXT,
+  "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "userID" INT NOT NULL REFERENCES USERS("userID") ON DELETE CASCADE,
+  "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE CASCADE
+);
