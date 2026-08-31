@@ -3,6 +3,7 @@ import "./Login.css";
 
 export default function Login({ onLoginSuccess }) {
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [accountType, setAccountType] = useState("MEMBER");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -36,8 +37,9 @@ export default function Login({ onLoginSuccess }) {
     setSuccessMessage("");
 
     try {
+      const role = accountType === "ADMIN" ? "ADMIN" : "MEMBER";
+
       if (isLoginMode) {
-        // Handle User Login
         const response = await fetch("/api/users/login", {
           method: "POST",
           headers: {
@@ -55,12 +57,19 @@ export default function Login({ onLoginSuccess }) {
           throw new Error(data.message || "Invalid email or password");
         }
 
+        if (data.user.role !== role) {
+          throw new Error(
+            role === "ADMIN"
+              ? "This account is not an admin account."
+              : "This account is not a member account."
+          );
+        }
+
         setSuccessMessage("Login successful!");
         if (onLoginSuccess) {
           onLoginSuccess(data.user);
         }
       } else {
-        // Handle Create New User (Role automatically 'MEMBER')
         const response = await fetch("/api/users", {
           method: "POST",
           headers: {
@@ -71,7 +80,7 @@ export default function Login({ onLoginSuccess }) {
             email: formData.email.trim(),
             phone: formData.phone.trim(),
             address: formData.address.trim(),
-            role: "MEMBER",
+            role,
             password: formData.password,
           }),
         });
@@ -84,7 +93,6 @@ export default function Login({ onLoginSuccess }) {
 
         setSuccessMessage("Account created successfully! Please sign in.");
         setIsLoginMode(true);
-        // Retain email and clear password
         setFormData((prev) => ({
           ...prev,
           password: "",
@@ -97,6 +105,8 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
+  const selectedLabel = accountType === "ADMIN" ? "Admin" : "Member";
+
   return (
     <div className="auth-wrapper">
       <div className="auth-card">
@@ -105,9 +115,26 @@ export default function Login({ onLoginSuccess }) {
           <h2>Library Management System</h2>
           <p className="auth-subtitle">
             {isLoginMode
-              ? "Sign in to access your library account"
-              : "Create a new member account"}
+              ? `Sign in as ${selectedLabel}`
+              : `Create a new ${selectedLabel.toLowerCase()} account`}
           </p>
+        </div>
+
+        <div className="auth-type-switch" role="tablist" aria-label="Account type">
+          <button
+            type="button"
+            className={accountType === "MEMBER" ? "type-button active" : "type-button"}
+            onClick={() => setAccountType("MEMBER")}
+          >
+            Member
+          </button>
+          <button
+            type="button"
+            className={accountType === "ADMIN" ? "type-button active" : "type-button"}
+            onClick={() => setAccountType("ADMIN")}
+          >
+            Admin
+          </button>
         </div>
 
         {errorMessage && (
@@ -210,8 +237,8 @@ export default function Login({ onLoginSuccess }) {
                 ? "Signing in..."
                 : "Creating account..."
               : isLoginMode
-              ? "Sign In"
-              : "Create Account"}
+              ? `Sign In as ${selectedLabel}`
+              : `Create ${selectedLabel} Account`}
           </button>
         </form>
 

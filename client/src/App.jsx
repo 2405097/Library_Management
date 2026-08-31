@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Login from "./components/Login.jsx";
 import Dashboard from "./components/Dashboard.jsx";
+import AdminDashboard from "./components/AdminDashboard.jsx";
 import "./App.css";
 
 function App() {
@@ -29,7 +30,11 @@ function App() {
   return (
     <main className="app-container">
       {currentUser ? (
-        <Dashboard user={currentUser} onLogout={handleLogout} />
+        currentUser.role === "ADMIN" ? (
+          <AdminDashboard user={currentUser} onLogout={handleLogout} />
+        ) : (
+          <Dashboard user={currentUser} onLogout={handleLogout} />
+        )
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}

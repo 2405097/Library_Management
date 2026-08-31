@@ -273,3 +273,231 @@ export const updateLastLogin = async (userID) => {
   const { rows } = await pool.query(query, [userID]);
   return rows[0];
 };
+
+
+export const searchBooksByField = async (field, keyword) => {
+  const searchValue = `%${keyword}%`;
+
+  let query = `
+    SELECT
+      b."bookID",
+      b.title,
+      b.genre,
+      b.price,
+      b."ISBN",
+      b."publicationYear",
+      p."publisherName",
+      a.name AS author_name
+    FROM BOOK b
+    LEFT JOIN PUBLISHER p ON p."publisherID" = b."publisherID"
+    LEFT JOIN BOOK_AUTHOR ba ON ba."bookID" = b."bookID"
+    LEFT JOIN AUTHOR a ON a."authorID" = ba."authorID"
+    WHERE 1 = 1
+  `;
+
+  const values = [];
+
+  if (field === "title") {
+    query += ` AND LOWER(b.title) LIKE LOWER($1) `;
+    values.push(searchValue);
+  } else if (field === "bookID") {
+    query += ` AND CAST(b."bookID" AS TEXT) LIKE $1 `;
+    values.push(searchValue);
+  } else if (field === "genre") {
+    query += ` AND LOWER(b.genre) LIKE LOWER($1) `;
+    values.push(searchValue);
+  } else if (field === "author") {
+    query += ` AND LOWER(a.name) LIKE LOWER($1) `;
+    values.push(searchValue);
+  } else if (field === "publisher") {
+    query += ` AND LOWER(p."publisherName") LIKE LOWER($1) `;
+    values.push(searchValue);
+  } else {
+    throw new Error("Invalid search field");
+  }
+
+  const { rows } = await pool.query(query, values);
+  return rows.map((book) => ({
+    bookID: book.bookID,
+    title: book.title,
+    genre: book.genre,
+    authorName: book.author_name,
+    publisher: book.publisherName,
+    price: Number(book.price || 0),
+    ISBN: book.ISBN,
+  }));
+};
+
+export const getBorrowRecordsByUserId = async (userID) => {
+  const query = `
+    SELECT
+      br."borrowID",
+      br."borrowDate",
+      br."dueDate",
+      br."returnDate",
+      br."delayFee",
+      br.status,
+      br."bookID",
+      b.title AS "bookName"
+    FROM BORROW_RECORD br
+    LEFT JOIN BOOK b ON b."bookID" = br."bookID"
+    WHERE br."userID" = $1
+    ORDER BY br."borrowDate" DESC;
+  `;
+
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const getBookReviewsByUserId = async (userID) => {
+  const query = `
+    SELECT
+      br."reviewID",
+      br.rating,
+      br.comment,
+      br."createdAt",
+      br."bookID" AS book_id,
+      b.title AS book_name
+    FROM BOOK_REVIEW br
+    LEFT JOIN BOOK b ON b."bookID" = br."bookID"
+    WHERE br."userID" = $1
+    ORDER BY br."createdAt" DESC;
+  `;
+
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const getOrdersByUserId = async (userID) => {
+  const query = `
+    SELECT
+      o."purchaseNo",
+      o."orderDate",
+      o.price,
+      o."bookID" AS book_id,
+      b.title AS book_name,
+      string_agg(a.name, ', ') AS author_name,
+      p."publisherName" AS publisher_name
+    FROM "ORDER" o
+    LEFT JOIN BOOK b ON b."bookID" = o."bookID"
+    LEFT JOIN BOOK_AUTHOR ba ON ba."bookID" = o."bookID"
+    LEFT JOIN AUTHOR a ON a."authorID" = ba."authorID"
+    LEFT JOIN PUBLISHER p ON p."publisherID" = b."publisherID"
+    WHERE o."userID" = $1
+    GROUP BY o."purchaseNo", o."orderDate", o.price, o."bookID", b.title, p."publisherName"
+    ORDER BY o."orderDate" DESC;
+  `;
+
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const getLibraryReviewsByUserId = async (userID) => {
+  const query = `
+    SELECT
+      "libReviewID",
+      rating,
+      "reportDetails",
+      "createdAt"
+    FROM LIBRARY_REVIEW
+    WHERE "userID" = $1
+    ORDER BY "createdAt" DESC;
+  `;
+
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const createLibraryReview = async (userID, rating, reportDetails) => {
+  const query = `
+    INSERT INTO LIBRARY_REVIEW ("userID", rating, "reportDetails")
+    VALUES ($1, $2, $3)
+    RETURNING "libReviewID", rating, "reportDetails", "createdAt";
+  `;
+
+  const { rows } = await pool.query(query, [userID, rating, reportDetails]);
+  return rows[0];
+};
+
+export const getAdminSummary = async () => {
+  const query = `
+    SELECT
+      (SELECT COUNT(*) FROM USERS) AS total_users,
+      (SELECT COUNT(*) FROM BOOK) AS total_books,
+      (SELECT COUNT(*) FROM BORROW_RECORD WHERE status = 'BORROWED') AS active_borrow_records,
+      (SELECT COUNT(*) FROM "ORDER") AS total_orders,
+      (SELECT COUNT(*) FROM LIBRARY_REVIEW) AS total_library_reviews;
+  `;
+
+  const { rows } = await pool.query(query);
+  return rows[0] || {};
+};
+
+export const getAdminBooks = async () => {
+  const query = `
+    SELECT
+      b."bookID",
+      b.title,
+      b.genre,
+      b.price,
+      b."availableCopies",
+      b."totalCopies",
+      p."publisherName",
+      STRING_AGG(DISTINCT a.name, ', ') AS author_names
+    FROM BOOK b
+    LEFT JOIN PUBLISHER p ON p."publisherID" = b."publisherID"
+    LEFT JOIN BOOK_AUTHOR ba ON ba."bookID" = b."bookID"
+    LEFT JOIN AUTHOR a ON a."authorID" = ba."authorID"
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."availableCopies", b."totalCopies", p."publisherName"
+    ORDER BY b."bookID" ASC;
+  `;
+
+  const { rows } = await pool.query(query);
+  return rows;
+};
+
+export const getAdminBorrowRecords = async () => {
+  const query = `
+    SELECT
+      br."borrowID",
+      br."borrowDate",
+      br."dueDate",
+      br."returnDate",
+      br.status,
+      br."delayFee",
+      u.name AS member_name,
+      b.title AS book_name
+    FROM BORROW_RECORD br
+    LEFT JOIN USERS u ON u."userID" = br."userID"
+    LEFT JOIN BOOK b ON b."bookID" = br."bookID"
+    ORDER BY br."borrowDate" DESC;
+  `;
+
+  const { rows } = await pool.query(query);
+  return rows;
+};
+
+export const getAdminOrders = async () => {
+  const query = `
+    SELECT
+      o."purchaseNo",
+      o."orderDate",
+      o.price,
+      o.quantity,
+      u.name AS member_name,
+      b.title AS book_name,
+      p."publisherName" AS publisher_name,
+      STRING_AGG(DISTINCT a.name, ', ') AS author_names
+    FROM "ORDER" o
+    LEFT JOIN USERS u ON u."userID" = o."userID"
+    LEFT JOIN BOOK b ON b."bookID" = o."bookID"
+    LEFT JOIN PUBLISHER p ON p."publisherID" = b."publisherID"
+    LEFT JOIN BOOK_AUTHOR ba ON ba."bookID" = b."bookID"
+    LEFT JOIN AUTHOR a ON a."authorID" = ba."authorID"
+    GROUP BY o."purchaseNo", o."orderDate", o.price, o.quantity, u.name, b.title, p."publisherName"
+    ORDER BY o."orderDate" DESC;
+  `;
+
+  const { rows } = await pool.query(query);
+  return rows;
+};

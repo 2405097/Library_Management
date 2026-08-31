@@ -6,7 +6,17 @@ import {
   updateLastLogin,
   getAllUsers,
   updateUser,
-  deleteUser 
+  deleteUser,
+  getBorrowRecordsByUserId,
+  getBookReviewsByUserId,
+  getOrdersByUserId,
+  getLibraryReviewsByUserId,
+  createLibraryReview,
+  searchBooksByField,
+  getAdminSummary,
+  getAdminBooks,
+  getAdminBorrowRecords,
+  getAdminOrders
 } from '../Models/user.model.js';
 
 // Login user
@@ -119,6 +129,113 @@ export const deleteUserDetails = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     res.status(200).json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const searchBooks = async (req, res) => {
+  try {
+    const { field, keyword } = req.query;
+
+    if (!field || !keyword) {
+      return res.status(400).json({ message: "Search field and keyword are required" });
+    }
+
+    const books = await searchBooksByField(field, keyword);
+    res.status(200).json(books);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getBorrowRecordsByUser = async (req, res) => {
+  try {
+    const records = await getBorrowRecordsByUserId(req.params.id);
+    res.status(200).json(records);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getBookReviewsByUser = async (req, res) => {
+  try {
+    const reviews = await getBookReviewsByUserId(req.params.id);
+    res.status(200).json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getOrdersByUser = async (req, res) => {
+  try {
+    const orders = await getOrdersByUserId(req.params.id);
+    res.status(200).json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getLibraryReviewsByUser = async (req, res) => {
+  try {
+    const reviews = await getLibraryReviewsByUserId(req.params.id);
+    res.status(200).json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createLibraryReviewForUser = async (req, res) => {
+  try {
+    const { rating, reportDetails } = req.body;
+
+    if (!rating || !reportDetails || !String(reportDetails).trim()) {
+      return res.status(400).json({ message: "Rating and review details are required" });
+    }
+
+    const numericRating = Number(rating);
+    if (Number.isNaN(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: "Rating must be between 1 and 5" });
+    }
+
+    const review = await createLibraryReview(req.params.id, numericRating, reportDetails.trim());
+    res.status(201).json({ message: "Library review created successfully", review });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminDashboardSummary = async (req, res) => {
+  try {
+    const summary = await getAdminSummary();
+    res.status(200).json(summary);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminBooksData = async (req, res) => {
+  try {
+    const books = await getAdminBooks();
+    res.status(200).json(books);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminBorrowData = async (req, res) => {
+  try {
+    const borrowRecords = await getAdminBorrowRecords();
+    res.status(200).json(borrowRecords);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminOrderData = async (req, res) => {
+  try {
+    const orders = await getAdminOrders();
+    res.status(200).json(orders);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
