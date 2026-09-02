@@ -11,13 +11,15 @@ import {
   getOrdersByUser,
   getLibraryReviewsByUser,
   createLibraryReviewForUser,
-  searchBooks,
 } from '../Controllers/user.controller.js';
 
 const router = express.Router();
 
 // POST /api/users/login - Login user
 router.post('/login', loginUser);
+
+// POST /api/users - Create new user
+router.post('/', createNewUser);
 
 // GET /api/users - Get all users
 router.get('/', getUsers);
@@ -40,16 +42,10 @@ router.get('/:id/library-reviews', getLibraryReviewsByUser);
 // POST /api/users/:id/library-reviews - Add a library review for a user
 router.post('/:id/library-reviews', createLibraryReviewForUser);
 
-// POST /api/users - Create new user
-router.post('/', createNewUser);
-
 // PUT /api/users/:id - Update user
 router.put('/:id', updateUserDetails);
 
 // DELETE /api/users/:id - Delete user
 router.delete('/:id', deleteUserDetails);
 
-// search books
-router.get('/search', searchBooks);
-
-export default router;
+export default router;

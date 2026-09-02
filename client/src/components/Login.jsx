@@ -105,154 +105,175 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  const selectedLabel = accountType === "ADMIN" ? "Admin" : "Member";
-
   return (
-    <div className="auth-wrapper">
+    <div className="auth-page">
+      <div className="auth-brand">
+        <span className="auth-brand-icon">📚</span>
+        <span className="auth-brand-name">LibraryMS</span>
+      </div>
+
       <div className="auth-card">
-        <div className="auth-header">
-          <div className="auth-logo">📚</div>
-          <h2>Library Management System</h2>
-          <p className="auth-subtitle">
-            {isLoginMode
-              ? `Sign in as ${selectedLabel}`
-              : `Create a new ${selectedLabel.toLowerCase()} account`}
-          </p>
-        </div>
-
-        <div className="auth-type-switch" role="tablist" aria-label="Account type">
-          <button
-            type="button"
-            className={accountType === "MEMBER" ? "type-button active" : "type-button"}
-            onClick={() => setAccountType("MEMBER")}
-          >
-            Member
-          </button>
-          <button
-            type="button"
-            className={accountType === "ADMIN" ? "type-button active" : "type-button"}
-            onClick={() => setAccountType("ADMIN")}
-          >
-            Admin
-          </button>
-        </div>
-
-        {errorMessage && (
-          <div className="alert alert-danger" role="alert">
-            {errorMessage}
+        <div className="auth-card-inner">
+          {/* Left decorative panel */}
+          <div className="auth-panel-left">
+            <div className="auth-panel-content">
+              <h1>Your Library,<br />Anytime.</h1>
+              <p>Search thousands of books, manage your borrows, write reviews and more — all in one place.</p>
+              <ul className="auth-feature-list">
+                <li>📖 Browse &amp; search books</li>
+                <li>🔖 Track borrow records</li>
+                <li>⭐ Write book reviews</li>
+                <li>🛒 Order books online</li>
+              </ul>
+            </div>
           </div>
-        )}
 
-        {successMessage && (
-          <div className="alert alert-success" role="alert">
-            {successMessage}
-          </div>
-        )}
+          {/* Right form panel */}
+          <div className="auth-panel-right">
+            <div className="auth-form-header">
+              <h2>{isLoginMode ? "Welcome back" : "Create account"}</h2>
+              <p className="auth-subtitle">
+                {isLoginMode
+                  ? "Sign in to continue to the library"
+                  : "Fill in your details to get started"}
+              </p>
+            </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          {!isLoginMode && (
-            <>
+            {errorMessage && (
+              <div className="alert alert-danger" role="alert">
+                ⚠ {errorMessage}
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="alert alert-success" role="alert">
+                ✓ {successMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="auth-form">
+              {!isLoginMode && (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="name">Full Name <span className="required">*</span></label>
+                    <input
+                      id="name"
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="e.g. Jane Doe"
+                      required
+                      autoComplete="name"
+                      className="form-control"
+                    />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="phone">Phone</label>
+                      <input
+                        id="phone"
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="+880..."
+                        autoComplete="tel"
+                        className="form-control"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="address">Address</label>
+                      <input
+                        id="address"
+                        type="text"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleChange}
+                        placeholder="City, Country"
+                        autoComplete="street-address"
+                        className="form-control"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="form-group">
-                <label htmlFor="name">Full Name *</label>
+                <label htmlFor="email">Email Address <span className="required">*</span></label>
                 <input
-                  id="name"
-                  type="text"
-                  name="name"
-                  value={formData.name}
+                  id="email"
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleChange}
-                  placeholder="e.g. Jane Doe"
+                  placeholder="user@example.com"
                   required
-                  autoComplete="name"
+                  autoComplete="email"
                   className="form-control"
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="phone">Phone Number</label>
+                <label htmlFor="password">Password <span className="required">*</span></label>
                 <input
-                  id="phone"
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
+                  id="password"
+                  type="password"
+                  name="password"
+                  value={formData.password}
                   onChange={handleChange}
-                  placeholder="e.g. +1 555-0199"
-                  autoComplete="tel"
+                  placeholder="Enter your password"
+                  required
+                  autoComplete={isLoginMode ? "current-password" : "new-password"}
                   className="form-control"
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="address">Address</label>
-                <input
-                  id="address"
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  placeholder="e.g. 123 Main St, Springfield"
-                  autoComplete="street-address"
-                  className="form-control"
-                />
+                <label htmlFor="role">Role <span className="required">*</span></label>
+                <div className="select-wrapper">
+                  <select
+                    id="role"
+                    value={accountType}
+                    onChange={(e) => setAccountType(e.target.value)}
+                    className="form-control"
+                  >
+                    <option value="MEMBER">Member</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                  <span className="select-arrow">▾</span>
+                </div>
               </div>
-            </>
-          )}
 
-          <div className="form-group">
-            <label htmlFor="email">Email Address *</label>
-            <input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="e.g. user@example.com"
-              required
-              autoComplete="email"
-              className="form-control"
-            />
+              <button
+                type="submit"
+                className="btn btn-primary btn-full"
+                disabled={loading}
+              >
+                {loading
+                  ? isLoginMode
+                    ? "Signing in..."
+                    : "Creating account..."
+                  : isLoginMode
+                  ? "Sign In"
+                  : "Create Account"}
+              </button>
+            </form>
+
+            <div className="auth-footer">
+              <p>
+                {isLoginMode ? "Don't have an account? " : "Already have an account? "}
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="btn-link"
+                >
+                  {isLoginMode ? "Sign Up" : "Sign In"}
+                </button>
+              </p>
+            </div>
           </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password *</label>
-            <input
-              id="password"
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Enter your password"
-              required
-              autoComplete={isLoginMode ? "current-password" : "new-password"}
-              className="form-control"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading}
-          >
-            {loading
-              ? isLoginMode
-                ? "Signing in..."
-                : "Creating account..."
-              : isLoginMode
-              ? `Sign In as ${selectedLabel}`
-              : `Create ${selectedLabel} Account`}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          <p>
-            {isLoginMode ? "Don't have an account?" : "Already have an account?"}
-            <button
-              type="button"
-              onClick={toggleMode}
-              className="btn-link"
-            >
-              {isLoginMode ? "Create new account" : "Sign In"}
-            </button>
-          </p>
         </div>
       </div>
     </div>

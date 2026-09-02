@@ -28,7 +28,7 @@ function App() {
   };
 
   return (
-    <main className="app-container">
+    <div className="app-container">
       {currentUser ? (
         currentUser.role === "ADMIN" ? (
           <AdminDashboard user={currentUser} onLogout={handleLogout} />
@@ -38,7 +38,7 @@ function App() {
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />
       )}
-    </main>
+    </div>
   );
 }
 
