@@ -1,5 +1,9 @@
 import { useState } from "react";
 import "./Login.css";
+import bookIcon from "../assets/book-open.svg";
+import iconBookmark from "../assets/bookmark-check.svg";
+import iconReview from "../assets/message-square-quote.svg";
+import iconCart from "../assets/shopping-cart-plus.svg";
 
 export default function Login({ onLoginSuccess }) {
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -108,8 +112,10 @@ export default function Login({ onLoginSuccess }) {
   return (
     <div className="auth-page">
       <div className="auth-brand">
-        <span className="auth-brand-icon">📚</span>
-        <span className="auth-brand-name">LibraryMS</span>
+        <span className="auth-brand-icon">
+          <img src={bookIcon} alt="" aria-hidden="true" />
+        </span>
+        <span className="auth-brand-name">Library<strong>MS</strong></span>
       </div>
 
       <div className="auth-card">
@@ -120,10 +126,10 @@ export default function Login({ onLoginSuccess }) {
               <h1>Your Library,<br />Anytime.</h1>
               <p>Search thousands of books, manage your borrows, write reviews and more — all in one place.</p>
               <ul className="auth-feature-list">
-                <li>📖 Browse &amp; search books</li>
-                <li>🔖 Track borrow records</li>
-                <li>⭐ Write book reviews</li>
-                <li>🛒 Order books online</li>
+                <li><img src={bookIcon}     alt="" aria-hidden="true" /> Browse &amp; search books</li>
+                <li><img src={iconBookmark} alt="" aria-hidden="true" /> Track borrow records</li>
+                <li><img src={iconReview}   alt="" aria-hidden="true" /> Write book reviews</li>
+                <li><img src={iconCart}     alt="" aria-hidden="true" /> Order books online</li>
               </ul>
             </div>
           </div>

@@ -41,7 +41,7 @@ export default function AdminDashboard({ user, onLogout }) {
         setBookInfo(booksData);
         setBorrowBookInfo(borrowData);
         setOrderedBookInfo(orderData);
-      } catch (error) {
+      } catch {
         setSummary({
           total_users: 0,
           total_books: 0,

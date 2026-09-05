@@ -1,5 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import "./Dashboard.css";
+import iconBookOpen from "../assets/book-open.svg";
+import iconBookmark from "../assets/bookmark-check.svg";
+import iconReview from "../assets/message-square-quote.svg";
+import iconCart from "../assets/shopping-cart-plus.svg";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -139,11 +143,11 @@ export default function Dashboard({ user, onLogout }) {
 
   // ── nav menu items ────────────────────────────────────────────
   const menuItems = [
-    { key: "user_info", icon: "👤", label: "User Information" },
-    { key: "borrow_record", icon: "📋", label: "Borrow Records" },
-    { key: "book_review", icon: "⭐", label: "Book Reviews" },
-    { key: "order_info", icon: "🛒", label: "Order Info" },
-    { key: "library_review", icon: "📝", label: "Library Reviews" },
+    { key: "user_info", label: "User Information" },
+    { key: "borrow_record", label: "Borrow Records" },
+    { key: "book_review", label: "Book Reviews" },
+    { key: "order_info", label: "Order Info" },
+    { key: "library_review", label: "Library Reviews" },
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
@@ -153,7 +157,10 @@ export default function Dashboard({ user, onLogout }) {
       {/* ── NAVBAR ── */}
       <nav className="lib-nav">
         <div className="lib-nav-left">
-          <span className="lib-logo">📚 <strong>LibraryMS</strong></span>
+          <span className="lib-logo">
+            <img src={iconBookOpen} alt="" className="lib-logo-icon" aria-hidden="true" />
+            <span className="lib-logo-text">Library<strong>MS</strong></span>
+          </span>
 
           {/* Search bar */}
           <form className="lib-search-form" onSubmit={handleSearch}>
@@ -183,7 +190,12 @@ export default function Dashboard({ user, onLogout }) {
               )}
             </div>
             <button type="submit" className="lib-search-btn" disabled={isSearching} aria-label="Search">
-              {isSearching ? "…" : "🔍"}
+              {isSearching ? "…" : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              )}
             </button>
           </form>
         </div>
@@ -214,12 +226,12 @@ export default function Dashboard({ user, onLogout }) {
                     className="lib-dropdown-item"
                     onClick={() => openSection(item.key)}
                   >
-                    <span>{item.icon}</span> {item.label}
+                    {item.label}
                   </button>
                 ))}
                 <hr className="lib-dropdown-divider" />
                 <button className="lib-dropdown-item lib-signout" onClick={onLogout}>
-                  <span>🚪</span> Sign Out
+                  Sign Out
                 </button>
               </div>
             )}
@@ -410,24 +422,27 @@ export default function Dashboard({ user, onLogout }) {
               <h1>Welcome to the Library</h1>
               <p>Use the search bar above to find books by title, author, genre, publisher, or ID.</p>
             </div>
+            <div className="lib-hero-divider">
+              <span className="lib-hero-divider-icon">✦</span>
+            </div>
             <div className="lib-feature-cards">
               <div className="lib-feature-card">
-                <span>📖</span>
+                <img src={iconBookOpen} alt="" className="lib-feature-icon" aria-hidden="true" />
                 <h3>Browse Books</h3>
                 <p>Search and discover books in our collection.</p>
               </div>
               <div className="lib-feature-card">
-                <span>🔖</span>
+                <img src={iconBookmark} alt="" className="lib-feature-icon" aria-hidden="true" />
                 <h3>Track Borrows</h3>
                 <p>Keep track of your borrowed books and due dates.</p>
               </div>
               <div className="lib-feature-card">
-                <span>⭐</span>
+                <img src={iconReview} alt="" className="lib-feature-icon" aria-hidden="true" />
                 <h3>Write Reviews</h3>
                 <p>Share your thoughts on books and the library.</p>
               </div>
               <div className="lib-feature-card">
-                <span>🛒</span>
+                <img src={iconCart} alt="" className="lib-feature-icon" aria-hidden="true" />
                 <h3>Order Books</h3>
                 <p>Purchase your favourite titles directly online.</p>
               </div>
@@ -444,7 +459,6 @@ export default function Dashboard({ user, onLogout }) {
             </div>
             {books.length === 0 && !isSearching ? (
               <div className="lib-no-results">
-                <span>📭</span>
                 <p>No books found. Try a different search term or field.</p>
               </div>
             ) : (
