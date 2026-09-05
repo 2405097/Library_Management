@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Login from "./components/Login.jsx";
-import Dashboard from "./components/Dashboard.jsx";
+import MemberWorkspace from "./components/MemberWorkspace.jsx";
 import AdminDashboard from "./components/AdminDashboard.jsx";
 import "./App.css";
 
@@ -33,7 +33,7 @@ function App() {
         currentUser.role === "ADMIN" ? (
           <AdminDashboard user={currentUser} onLogout={handleLogout} />
         ) : (
-          <Dashboard user={currentUser} onLogout={handleLogout} />
+          <MemberWorkspace user={currentUser} onLogout={handleLogout} />
         )
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />

@@ -143,8 +143,6 @@ export default function Login({ onLoginSuccess }) {
     }
   };
 
-  const selectedLabel = accountType === "ADMIN" ? "Admin" : "Member";
-
   if (authView === "welcome") {
     return (
       <div className="welcome-screen">

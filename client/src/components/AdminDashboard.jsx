@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import "./Login.css";
 
 const adminTabs = [
-  { key: "admin_info", label: "Admin Info" },
   { key: "library_info", label: "Library Info" },
   { key: "book_info", label: "Book Info" },
   { key: "borrow_book_info", label: "Borrow Book Info" },
@@ -81,7 +80,18 @@ export default function AdminDashboard({ user, onLogout }) {
             <p className="auth-subtitle">{user.email}</p>
           </div>
           <div className="dashboard-actions">
-            <span className="badge-role">{user.role || "ADMIN"}</span>
+            <button
+              type="button"
+              className={`admin-info-button ${activeTab === "admin_info" ? "active" : ""}`}
+              onClick={() => setActiveTab("admin_info")}
+              aria-label="Open admin information"
+              title="Admin information"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.25" />
+                <path d="M5.5 20c.7-3.2 2.8-5 6.5-5s5.8 1.8 6.5 5" />
+              </svg>
+            </button>
             <button type="button" onClick={onLogout} className="btn btn-secondary small-btn">
               Sign Out
             </button>
