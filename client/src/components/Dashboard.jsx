@@ -1,9 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import "./Dashboard.css";
 import iconBookOpen from "../assets/book-open.svg";
-import iconBookmark from "../assets/bookmark-check.svg";
-import iconReview from "../assets/message-square-quote.svg";
-import iconCart from "../assets/shopping-cart-plus.svg";
+import BookShelf from "./BookShelf";
+import BookDetailModal from "./BookDetailModal";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -43,6 +42,7 @@ export default function Dashboard({ user, onLogout }) {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [newReviewData, setNewReviewData] = useState({ rating: 5, reportDetails: "" });
   const [reviewMsg, setReviewMsg] = useState("");
+  const [selectedBook, setSelectedBook] = useState(null);
 
   const drawerRef = useRef(null);
 
@@ -74,19 +74,27 @@ export default function Dashboard({ user, onLogout }) {
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [drawerOpen]);
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    const query = searchValue.trim();
+  const executeSearch = useCallback(async (field, keyword, updateHistory = true) => {
+    const query = keyword.trim();
     if (!query) return;
+
+    if (updateHistory) {
+      const searchUrl = `/search?field=${encodeURIComponent(field)}&keyword=${encodeURIComponent(query)}`;
+      if (window.location.pathname + window.location.search !== searchUrl) {
+        window.history.pushState({ type: "search", field, query }, "", searchUrl);
+      }
+    }
+
     setIsSearching(true);
     setHasSearched(true);
+    setActiveSection(null);
     try {
       const res = await fetch(
-        `/api/books/search?field=${encodeURIComponent(searchField)}&keyword=${encodeURIComponent(query)}`
+        `/api/books/search?field=${encodeURIComponent(field)}&keyword=${encodeURIComponent(query)}`
       );
       if (res.ok) {
         const data = await res.json();
-        setBooks(data);
+        setBooks(Array.isArray(data) ? data : []);
       } else {
         setBooks([]);
       }
@@ -95,13 +103,54 @@ export default function Dashboard({ user, onLogout }) {
     } finally {
       setIsSearching(false);
     }
+  }, []);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    executeSearch(searchField, searchValue, true);
   };
 
-  const handleClear = () => {
+  const goHome = (e) => {
+    if (e) e.preventDefault();
+    if (window.location.pathname !== "/" || window.location.search !== "") {
+      window.history.pushState({ type: "home" }, "", "/");
+    }
     setSearchValue("");
     setBooks([]);
     setHasSearched(false);
+    setActiveSection(null);
+    setDrawerOpen(false);
   };
+
+  const handleClear = () => {
+    goHome();
+  };
+
+  // ── Sync with browser route / back & forward buttons ───────────
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const field = params.get("field");
+      const keyword = params.get("keyword");
+
+      if (window.location.pathname.startsWith("/search") && keyword) {
+        const validField = SEARCH_OPTIONS.some((o) => o.value === field) ? field : "title";
+        setSearchField(validField);
+        setSearchValue(keyword);
+        executeSearch(validField, keyword, false);
+      } else if (window.location.pathname === "/" || !keyword) {
+        setHasSearched(false);
+        setSearchValue("");
+        setBooks([]);
+      }
+    };
+
+    handleLocationChange();
+    window.addEventListener("popstate", handleLocationChange);
+    return () => {
+      window.removeEventListener("popstate", handleLocationChange);
+    };
+  }, [executeSearch]);
 
   const openSection = (key) => {
     setActiveSection(key);
@@ -157,10 +206,15 @@ export default function Dashboard({ user, onLogout }) {
       {/* ── NAVBAR ── */}
       <nav className="lib-nav">
         <div className="lib-nav-left">
-          <span className="lib-logo">
+          <a
+            href="/"
+            className="lib-logo"
+            onClick={goHome}
+            title="LibraryMS - Return to Home"
+          >
             <img src={iconBookOpen} alt="" className="lib-logo-icon" aria-hidden="true" />
             <span className="lib-logo-text">Library<strong>MS</strong></span>
-          </span>
+          </a>
 
           {/* Search bar */}
           <form className="lib-search-form" onSubmit={handleSearch}>
@@ -422,30 +476,15 @@ export default function Dashboard({ user, onLogout }) {
               <h1>Welcome to the Library</h1>
               <p>Use the search bar above to find books by title, author, genre, publisher, or ID.</p>
             </div>
-            <div className="lib-hero-divider">
-              <span className="lib-hero-divider-icon">✦</span>
-            </div>
-            <div className="lib-feature-cards">
-              <div className="lib-feature-card">
-                <img src={iconBookOpen} alt="" className="lib-feature-icon" aria-hidden="true" />
-                <h3>Browse Books</h3>
-                <p>Search and discover books in our collection.</p>
-              </div>
-              <div className="lib-feature-card">
-                <img src={iconBookmark} alt="" className="lib-feature-icon" aria-hidden="true" />
-                <h3>Track Borrows</h3>
-                <p>Keep track of your borrowed books and due dates.</p>
-              </div>
-              <div className="lib-feature-card">
-                <img src={iconReview} alt="" className="lib-feature-icon" aria-hidden="true" />
-                <h3>Write Reviews</h3>
-                <p>Share your thoughts on books and the library.</p>
-              </div>
-              <div className="lib-feature-card">
-                <img src={iconCart} alt="" className="lib-feature-icon" aria-hidden="true" />
-                <h3>Order Books</h3>
-                <p>Purchase your favourite titles directly online.</p>
-              </div>
+            <div className="lib-shelves">
+              <BookShelf genre="Thriller" label="Thrillers" onBookClick={setSelectedBook} />
+              <BookShelf genre="Classic Literature" label="Classic Literature" onBookClick={setSelectedBook} />
+              <BookShelf genre="Science Fiction" label="Science Fiction" onBookClick={setSelectedBook} />
+              <BookShelf genre="Mystery" label="Mystery" onBookClick={setSelectedBook} />
+              <BookShelf genre="Fantasy" label="Fantasy" onBookClick={setSelectedBook} />
+              <BookShelf genre="Romance" label="Romance" onBookClick={setSelectedBook} />
+              <BookShelf genre="History" label="History" onBookClick={setSelectedBook} />
+              <BookShelf genre="Biography" label="Biography" onBookClick={setSelectedBook} />
             </div>
           </div>
         ) : (
@@ -464,12 +503,36 @@ export default function Dashboard({ user, onLogout }) {
             ) : (
               <div className="lib-book-grid">
                 {books.map((book) => (
-                  <div className="lib-book-card" key={book.bookID}>
-                    <div
-                      className="lib-book-cover"
-                      style={{ backgroundColor: colorFromString(book.title) }}
-                    >
-                      <span className="lib-book-cover-title">{book.title}</span>
+                  <div
+                    className="lib-book-card"
+                    key={book.bookID}
+                    onClick={() => setSelectedBook(book)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <div className="lib-book-cover-wrapper">
+                      {book.ISBN && (
+                        <img
+                          src={`https://covers.openlibrary.org/b/isbn/${book.ISBN}-M.jpg`}
+                          alt={book.title}
+                          className="lib-book-cover-img"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                            if (e.target.nextElementSibling) {
+                              e.target.nextElementSibling.style.display = "flex";
+                            }
+                          }}
+                        />
+                      )}
+                      <div
+                        className="lib-book-cover"
+                        style={{
+                          backgroundColor: colorFromString(book.title),
+                          display: book.ISBN ? "none" : "flex",
+                        }}
+                      >
+                        <span className="lib-book-cover-title">{book.title}</span>
+                      </div>
                     </div>
                     <div className="lib-book-info">
                       <h4 className="lib-book-title">{book.title}</h4>
@@ -486,6 +549,9 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         )}
       </main>
+
+      {/* ── BOOK DETAIL MODAL ── */}
+      <BookDetailModal book={selectedBook} onClose={() => setSelectedBook(null)} />
     </div>
   );
 }

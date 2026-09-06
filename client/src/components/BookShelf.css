@@ -1,0 +1,145 @@
+.shelf {
+  margin-bottom: 44px;
+}
+
+.shelf-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 22px;
+  color: var(--text-primary);
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--border-warm);
+}
+
+.shelf-track {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-warm) transparent;
+}
+
+.shelf-track::-webkit-scrollbar {
+  height: 5px;
+}
+
+.shelf-track::-webkit-scrollbar-thumb {
+  background: var(--border-warm);
+  border-radius: 4px;
+}
+
+.shelf-card {
+  flex: 0 0 128px;
+  scroll-snap-align: start;
+  border: 1px solid var(--border-warm);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-card);
+  box-shadow: 2px 3px 10px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.shelf-card:hover {
+  transform: translateY(-4px) rotate(0.3deg);
+  box-shadow: 4px 8px 20px rgba(0, 0, 0, 0.13);
+}
+
+.shelf-card--skeleton {
+  height: 220px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-parchment) 25%,
+    #d8d2c4 50%,
+    var(--bg-parchment) 75%
+  );
+  background-size: 200% 100%;
+  animation: shelf-shimmer 1.4s infinite;
+}
+
+@keyframes shelf-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.shelf-card-cover-wrap {
+  position: relative;
+  width: 128px;
+  height: 182px;
+}
+
+.shelf-card-img {
+  width: 128px;
+  height: 182px;
+  object-fit: cover;
+  display: block;
+}
+
+.shelf-card-placeholder {
+  width: 128px;
+  height: 182px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  position: relative;
+}
+
+.shelf-card-placeholder::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.shelf-card-placeholder-title {
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.4;
+  z-index: 1;
+}
+
+.shelf-card-info {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border-warm);
+}
+
+.shelf-card-title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--text-primary);
+  margin: 0 0 3px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shelf-card-author {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

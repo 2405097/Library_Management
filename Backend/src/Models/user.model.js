@@ -324,6 +324,7 @@ export const searchBooksByField = async (field, keyword) => {
     publisher: book.publisherName,
     price: Number(book.price || 0),
     ISBN: book.ISBN,
+    publicationYear: book.publicationYear,
   }));
 };
 
