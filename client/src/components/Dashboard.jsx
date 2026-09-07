@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import "./Dashboard.css";
 import iconBookOpen from "../assets/book-open.svg";
 import BookShelf from "./BookShelf";
-import BookDetailModal from "./BookDetailModal";
+import BookPage from "./BookPage";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -43,6 +43,7 @@ export default function Dashboard({ user, onLogout }) {
   const [newReviewData, setNewReviewData] = useState({ rating: 5, reportDetails: "" });
   const [reviewMsg, setReviewMsg] = useState("");
   const [selectedBook, setSelectedBook] = useState(null);
+  const [selectedBookId, setSelectedBookId] = useState(null);
 
   const drawerRef = useRef(null);
 
@@ -90,6 +91,8 @@ export default function Dashboard({ user, onLogout }) {
     setIsSearching(true);
     setHasSearched(true);
     setActiveSection(null);
+    setSelectedBook(null);
+    setSelectedBookId(null);
     try {
       const res = await fetch(
         `/api/books/search?field=${encodeURIComponent(field)}&keyword=${encodeURIComponent(query)}`
@@ -120,6 +123,8 @@ export default function Dashboard({ user, onLogout }) {
     setSearchValue("");
     setBooks([]);
     setHasSearched(false);
+    setSelectedBook(null);
+    setSelectedBookId(null);
     setActiveSection(null);
     setDrawerOpen(false);
   };
@@ -128,19 +133,57 @@ export default function Dashboard({ user, onLogout }) {
     goHome();
   };
 
+  const handleSelectBook = (bookOrId) => {
+    const id = typeof bookOrId === "object" && bookOrId !== null ? bookOrId.bookID : bookOrId;
+    if (typeof bookOrId === "object" && bookOrId !== null) {
+      setSelectedBook(bookOrId);
+    } else {
+      setSelectedBook(null);
+    }
+    setSelectedBookId(id);
+    setHasSearched(false);
+    setActiveSection(null);
+    const bookUrl = `/book/${id}`;
+    if (window.location.pathname !== bookUrl) {
+      window.history.pushState({ type: "book", id }, "", bookUrl);
+    }
+  };
+
+  const handleBackFromBook = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      goHome();
+    }
+  };
+
   // ── Sync with browser route / back & forward buttons ───────────
   useEffect(() => {
     const handleLocationChange = () => {
+      const pathname = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
       const field = params.get("field");
       const keyword = params.get("keyword");
 
-      if (window.location.pathname.startsWith("/search") && keyword) {
+      if (pathname.startsWith("/book/")) {
+        const id = pathname.replace("/book/", "").trim();
+        if (id) {
+          setSelectedBookId(id);
+          setHasSearched(false);
+          setActiveSection(null);
+          return;
+        }
+      }
+
+      setSelectedBookId(null);
+      setSelectedBook(null);
+
+      if (pathname.startsWith("/search") && keyword) {
         const validField = SEARCH_OPTIONS.some((o) => o.value === field) ? field : "title";
         setSearchField(validField);
         setSearchValue(keyword);
         executeSearch(validField, keyword, false);
-      } else if (window.location.pathname === "/" || !keyword) {
+      } else if (pathname === "/" || !keyword) {
         setHasSearched(false);
         setSearchValue("");
         setBooks([]);
@@ -476,21 +519,27 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* ── MAIN CONTENT ── */}
       <main className="lib-main">
-        {!hasSearched ? (
+        {selectedBookId ? (
+          <BookPage
+            book={selectedBook}
+            bookId={selectedBookId}
+            onBack={handleBackFromBook}
+          />
+        ) : !hasSearched ? (
           <div className="lib-hero">
             <div className="lib-hero-text">
               <h1>Welcome to the Library</h1>
               <p>Use the search bar above to find books by title, author, genre, publisher, or ID.</p>
             </div>
             <div className="lib-shelves">
-              <BookShelf genre="Thriller" label="Thrillers" onBookClick={setSelectedBook} />
-              <BookShelf genre="Classic Literature" label="Classic Literature" onBookClick={setSelectedBook} />
-              <BookShelf genre="Science Fiction" label="Science Fiction" onBookClick={setSelectedBook} />
-              <BookShelf genre="Mystery" label="Mystery" onBookClick={setSelectedBook} />
-              <BookShelf genre="Fantasy" label="Fantasy" onBookClick={setSelectedBook} />
-              <BookShelf genre="Romance" label="Romance" onBookClick={setSelectedBook} />
-              <BookShelf genre="History" label="History" onBookClick={setSelectedBook} />
-              <BookShelf genre="Biography" label="Biography" onBookClick={setSelectedBook} />
+              <BookShelf genre="Thriller" label="Thrillers" onBookClick={handleSelectBook} />
+              <BookShelf genre="Classic Literature" label="Classic Literature" onBookClick={handleSelectBook} />
+              <BookShelf genre="Science Fiction" label="Science Fiction" onBookClick={handleSelectBook} />
+              <BookShelf genre="Mystery" label="Mystery" onBookClick={handleSelectBook} />
+              <BookShelf genre="Fantasy" label="Fantasy" onBookClick={handleSelectBook} />
+              <BookShelf genre="Romance" label="Romance" onBookClick={handleSelectBook} />
+              <BookShelf genre="History" label="History" onBookClick={handleSelectBook} />
+              <BookShelf genre="Biography" label="Biography" onBookClick={handleSelectBook} />
             </div>
           </div>
         ) : (
@@ -512,7 +561,7 @@ export default function Dashboard({ user, onLogout }) {
                   <div
                     className="lib-book-card"
                     key={book.bookID}
-                    onClick={() => setSelectedBook(book)}
+                    onClick={() => handleSelectBook(book)}
                     style={{ cursor: "pointer" }}
                   >
                     <div className="lib-book-cover-wrapper">
@@ -555,9 +604,6 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         )}
       </main>
-
-      {/* ── BOOK DETAIL MODAL ── */}
-      <BookDetailModal book={selectedBook} onClose={() => setSelectedBook(null)} />
     </div>
   );
 }

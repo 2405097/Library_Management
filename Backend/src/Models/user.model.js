@@ -303,6 +303,11 @@ export const searchBooksByField = async (field, keyword) => {
       b.price,
       b."ISBN",
       b."publicationYear",
+      b.avg_rating,
+      b.language,
+      b.edition,
+      b."totalCopies",
+      b."availableCopies",
       p."publisherName",
       STRING_AGG(DISTINCT a.name, ', ') AS author_name
     FROM book b
@@ -311,7 +316,7 @@ export const searchBooksByField = async (field, keyword) => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     WHERE 1 = 1
     ${whereClause}
-    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", p."publisherName"
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableCopies", p."publisherName"
     ORDER BY b.title ASC;
   `;
 
@@ -325,6 +330,11 @@ export const searchBooksByField = async (field, keyword) => {
     price: Number(book.price || 0),
     ISBN: book.ISBN,
     publicationYear: book.publicationYear,
+    avgRating: book.avg_rating != null ? Number(book.avg_rating) : null,
+    language: book.language || "English",
+    edition: book.edition,
+    totalCopies: book.totalCopies,
+    availableCopies: book.availableCopies,
   }));
 };
 
