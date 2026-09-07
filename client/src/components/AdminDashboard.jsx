@@ -24,11 +24,14 @@ export default function AdminDashboard({ user, onLogout }) {
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
+        const token = localStorage.getItem('library_token');
+        const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
+
         const [summaryRes, booksRes, borrowRes, ordersRes] = await Promise.all([
-          fetch("/api/admin/summary"),
-          fetch("/api/admin/books"),
-          fetch("/api/admin/borrow-records"),
-          fetch("/api/admin/orders"),
+          fetch('/api/admin/summary', { headers: authHeaders }),
+          fetch('/api/admin/books', { headers: authHeaders }),
+          fetch('/api/admin/borrow-records', { headers: authHeaders }),
+          fetch('/api/admin/orders', { headers: authHeaders }),
         ]);
 
         const summaryData = summaryRes.ok ? await summaryRes.json() : summary;

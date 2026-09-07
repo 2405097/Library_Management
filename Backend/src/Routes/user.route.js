@@ -6,46 +6,56 @@ import {
   updateUserDetails,
   deleteUserDetails,
   loginUser,
+  logoutUser,
   getBorrowRecordsByUser,
   getBookReviewsByUser,
   getOrdersByUser,
   getLibraryReviewsByUser,
   createLibraryReviewForUser,
 } from '../Controllers/user.controller.js';
+import { authenticate, authorize, authorizeSelfOrAdmin } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// POST /api/users/login - Login user
+// ── Public routes (no token required) ──────────────────────────────────────
+// POST /api/users/login — authenticate and receive a JWT
 router.post('/login', loginUser);
 
-// POST /api/users - Create new user
+// POST /api/users — register a new user account
 router.post('/', createNewUser);
 
-// GET /api/users - Get all users
-router.get('/', getUsers);
+// ── Authenticated routes ────────────────────────────────────────────────────
+// POST /api/users/logout — revoke the current JWT (genuine server-side logout)
+router.post('/logout', authenticate, logoutUser);
 
-// GET /api/users/:id - Get single user
-router.get('/:id', getUser);
+// ── Admin-only routes ───────────────────────────────────────────────────────
+// GET /api/users — list all users (ADMIN only)
+router.get('/', authenticate, authorize('ADMIN'), getUsers);
 
-// GET /api/users/:id/borrow-records - Borrow records for a user
-router.get('/:id/borrow-records', getBorrowRecordsByUser);
+// DELETE /api/users/:id — delete a user (ADMIN only)
+router.delete('/:id', authenticate, authorize('ADMIN'), deleteUserDetails);
 
-// GET /api/users/:id/book-reviews - Book reviews for a user
-router.get('/:id/book-reviews', getBookReviewsByUser);
+// ── Self-or-Admin routes (user can access own data; ADMIN can access any) ──
+// GET /api/users/:id — get user profile
+router.get('/:id', authenticate, authorizeSelfOrAdmin, getUser);
 
-// GET /api/users/:id/orders - Orders for a user
-router.get('/:id/orders', getOrdersByUser);
+// PUT /api/users/:id — update user profile
+router.put('/:id', authenticate, authorizeSelfOrAdmin, updateUserDetails);
 
-// GET /api/users/:id/library-reviews - Library reviews for a user
-router.get('/:id/library-reviews', getLibraryReviewsByUser);
+// GET /api/users/:id/borrow-records
+router.get('/:id/borrow-records', authenticate, authorizeSelfOrAdmin, getBorrowRecordsByUser);
 
-// POST /api/users/:id/library-reviews - Add a library review for a user
-router.post('/:id/library-reviews', createLibraryReviewForUser);
+// GET /api/users/:id/book-reviews
+router.get('/:id/book-reviews', authenticate, authorizeSelfOrAdmin, getBookReviewsByUser);
 
-// PUT /api/users/:id - Update user
-router.put('/:id', updateUserDetails);
+// GET /api/users/:id/orders
+router.get('/:id/orders', authenticate, authorizeSelfOrAdmin, getOrdersByUser);
 
-// DELETE /api/users/:id - Delete user
-router.delete('/:id', deleteUserDetails);
+// GET /api/users/:id/library-reviews
+router.get('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, getLibraryReviewsByUser);
 
-export default router;
+// POST /api/users/:id/library-reviews — submit a library review
+router.post('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, createLibraryReviewForUser);
+
+export default router;
+

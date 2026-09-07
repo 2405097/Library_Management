@@ -1,3 +1,6 @@
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { pool } from '../config/database.js';
 import { 
   createUser, 
   findUserById, 
@@ -19,7 +22,7 @@ import {
   getAdminOrders
 } from '../Models/user.model.js';
 
-// Login user
+// Login user — verifies bcrypt password, issues signed JWT
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -33,19 +36,43 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    if (user.passHash !== password) {
+    // Verify password against bcrypt hash stored in DB
+    const passwordMatch = await bcrypt.compare(password, user.passHash);
+    if (!passwordMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     // Update last login timestamp
     await updateLastLogin(user.userID);
 
+    // Sign JWT — role comes from DB, never from request body
+    const token = jwt.sign(
+      { userID: user.userID, role: user.role, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
     // Exclude password hash from response
     const { passHash, ...userWithoutPassword } = user;
     res.status(200).json({
       message: 'Login successful',
+      token,
       user: userWithoutPassword,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Logout user — revokes the JWT so it cannot be reused even before expiry
+export const logoutUser = async (req, res) => {
+  try {
+    // req.token is set by the authenticate middleware
+    await pool.query(
+      'INSERT INTO revoked_token (token) VALUES ($1) ON CONFLICT DO NOTHING',
+      [req.token]
+    );
+    res.status(200).json({ message: 'Logged out successfully.' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -74,7 +101,7 @@ export const getUser = async (req, res) => {
   }
 };
 
-// Create new user
+// Create new user — password is bcrypt-hashed before storage
 export const createNewUser = async (req, res) => {
   try {
     const { name, email, phone, address, role = 'MEMBER', password, passHash, username } = req.body;
@@ -86,16 +113,20 @@ export const createNewUser = async (req, res) => {
     // Check if user exists
     const existingUser = await findUserByEmail(email);
     if (existingUser) {
-      return res.status(400).json({ message: 'User with this email already exists' });
+      return res.status(409).json({ message: 'User with this email already exists' });
     }
-    
+
+    // Hash password before storing — never store plaintext
+    const rawPassword = password || passHash;
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
     const user = await createUser({
       name,
       email,
       phone: phone || null,
       address: address || null,
       role: role || 'MEMBER',
-      password: password || passHash,
+      password: hashedPassword,
       username: username || null,
     });
 

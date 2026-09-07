@@ -99,9 +99,9 @@ export default function Login({ onLoginSuccess }) {
           );
         }
 
-        setSuccessMessage("Login successful!");
+        setSuccessMessage('Login successful!');
         if (onLoginSuccess) {
-          onLoginSuccess(data.user);
+          onLoginSuccess(data.user, data.token);
         }
       } else {
         const response = await fetch("/api/users", {

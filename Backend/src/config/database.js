@@ -33,6 +33,14 @@ export const initializeDatabase = async () => {
     );
 
     if (schemaCheck.rows[0]?.users_table) {
+      // DB already initialised — still ensure revoked_token table exists
+      // (added in a later migration; safe to run IF NOT EXISTS every startup)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS revoked_token (
+          token TEXT PRIMARY KEY,
+          "revokedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
       return;
     }
 

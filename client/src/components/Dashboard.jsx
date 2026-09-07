@@ -50,11 +50,13 @@ export default function Dashboard({ user, onLogout }) {
   useEffect(() => {
     if (!user?.userID) return;
     const base = `/api/users/${user.userID}`;
+    const token = localStorage.getItem('library_token');
+    const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
     Promise.all([
-      fetch(`${base}/borrow-records`),
-      fetch(`${base}/book-reviews`),
-      fetch(`${base}/orders`),
-      fetch(`${base}/library-reviews`),
+      fetch(`${base}/borrow-records`, { headers: authHeaders }),
+      fetch(`${base}/book-reviews`, { headers: authHeaders }),
+      fetch(`${base}/orders`, { headers: authHeaders }),
+      fetch(`${base}/library-reviews`, { headers: authHeaders }),
     ]).then(async ([bRes, rRes, oRes, lRes]) => {
       setBorrowRecords(bRes.ok ? await bRes.json() : []);
       setBookReviews(rRes.ok ? await rRes.json() : []);
@@ -161,9 +163,13 @@ export default function Dashboard({ user, onLogout }) {
     e.preventDefault();
     if (!newReviewData.reportDetails.trim()) return;
     try {
+      const token = localStorage.getItem('library_token');
       const res = await fetch(`/api/users/${user.userID}/library-reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+        },
         body: JSON.stringify({
           rating: Number(newReviewData.rating),
           reportDetails: newReviewData.reportDetails.trim(),

@@ -17,14 +17,29 @@ function App() {
     return null;
   });
 
-  const handleLoginSuccess = (user) => {
+  const handleLoginSuccess = (user, token) => {
     setCurrentUser(user);
-    localStorage.setItem("library_user", JSON.stringify(user));
+    localStorage.setItem('library_user', JSON.stringify(user));
+    if (token) {
+      localStorage.setItem('library_token', token);
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem('library_token');
+    if (token) {
+      try {
+        await fetch('/api/users/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+      } catch {
+        // Proceed with client-side logout even if server call fails
+      }
+    }
     setCurrentUser(null);
-    localStorage.removeItem("library_user");
+    localStorage.removeItem('library_user');
+    localStorage.removeItem('library_token');
   };
 
   return (
