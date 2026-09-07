@@ -1,5 +1,102 @@
 * { box-sizing: border-box; }
 
+.welcome-screen {
+  width: min(100%, 1180px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(32px, 8vw, 92px) clamp(24px, 8vw, 112px);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: center;
+  gap: clamp(48px, 10vw, 150px);
+  color: #171717;
+}
+
+.welcome-brand {
+  align-self: center;
+}
+
+.brand-kicker {
+  margin: 0 0 22px;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.welcome-brand h1 {
+  max-width: 620px;
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(54px, 8vw, 112px);
+  font-weight: 400;
+  line-height: 0.88;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.welcome-brand h1 span {
+  display: block;
+  margin-top: 28px;
+  font-size: 0.72em;
+  letter-spacing: 0;
+}
+
+.brand-note {
+  margin: 42px 0 0;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  color: #555;
+}
+
+.welcome-panel {
+  width: 100%;
+  padding: 34px 28px;
+  box-sizing: border-box;
+  border: 1px solid #171717;
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.account-option + .account-option {
+  margin-top: 42px;
+}
+
+.account-option p {
+  margin: 0 0 10px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.account-option button {
+  display: block;
+  width: 100%;
+  padding: 13px 10px;
+  border: 1px solid #171717;
+  border-radius: 22px;
+  background: transparent;
+  color: #171717;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.account-option button + button {
+  margin-top: 8px;
+}
+
+.account-option button:hover,
+.account-option button:focus-visible {
+  background: #171717;
+  color: #fff;
+  outline: none;
+}
+
 .auth-page {
   min-height: 100vh;
   background: var(--bg-parchment);
@@ -217,6 +314,10 @@
 .auth-footer p { font-size: 13px; color: var(--text-muted); margin: 0; }
 
 /* Admin dashboard also uses some of these classes */
+.back-link {
+  margin-bottom: 14px;
+  padding-left: 0;
+}
 .dashboard-wrapper {
   min-height: 100vh;
   background: var(--bg-parchment);
@@ -251,6 +352,35 @@
   margin: 0 0 4px;
 }
 .dashboard-actions { display: flex; align-items: center; gap: 12px; }
+.admin-info-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(122,184,224,0.45);
+  border-radius: 50%;
+  background: rgba(26,101,158,0.25);
+  color: #7ab8e0;
+  cursor: pointer;
+}
+.admin-info-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+.admin-info-button:hover,
+.admin-info-button.active,
+.admin-info-button:focus-visible {
+  background: rgba(122,184,224,0.28);
+  border-color: #7ab8e0;
+  color: #fff;
+  outline: none;
+}
 .badge-role {
   padding: 4px 12px;
   border-radius: 20px;
@@ -360,4 +490,21 @@
   .dashboard-wrapper { padding: 16px 12px; }
   .dashboard-header { padding: 18px 16px; }
   .content-panel { padding: 18px 14px; }
+
+  .welcome-screen {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    align-content: center;
+    gap: 48px;
+    padding: 52px 24px;
+  }
+
+  .welcome-brand h1 {
+    font-size: clamp(52px, 17vw, 88px);
+  }
+
+  .welcome-panel {
+    max-width: 320px;
+    justify-self: center;
+  }
 }

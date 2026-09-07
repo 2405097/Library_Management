@@ -5,7 +5,20 @@ import iconBookmark from "../assets/bookmark-check.svg";
 import iconReview from "../assets/message-square-quote.svg";
 import iconCart from "../assets/shopping-cart-plus.svg";
 
+const readResponse = async (response) => {
+  const responseText = await response.text();
+
+  if (!responseText.trim()) return {};
+
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return {};
+  }
+};
+
 export default function Login({ onLoginSuccess }) {
+  const [authView, setAuthView] = useState("welcome");
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [accountType, setAccountType] = useState("MEMBER");
   const [formData, setFormData] = useState({
@@ -34,6 +47,14 @@ export default function Login({ onLoginSuccess }) {
     setSuccessMessage("");
   };
 
+  const openAuthForm = (mode, role = "MEMBER") => {
+    setAuthView("form");
+    setIsLoginMode(mode === "login");
+    setAccountType(role);
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -55,10 +76,19 @@ export default function Login({ onLoginSuccess }) {
           }),
         });
 
-        const data = await response.json();
+        const data = await readResponse(response);
 
         if (!response.ok) {
-          throw new Error(data.message || "Invalid email or password");
+          throw new Error(
+            data.message ||
+              (response.status >= 500
+                ? "The server could not process the login request."
+                : "Invalid email or password")
+          );
+        }
+
+        if (!data.user) {
+          throw new Error("The server returned an invalid login response.");
         }
 
         if (data.user.role !== role) {
@@ -89,7 +119,7 @@ export default function Login({ onLoginSuccess }) {
           }),
         });
 
-        const data = await response.json();
+        const data = await readResponse(response);
 
         if (!response.ok) {
           throw new Error(data.message || "Failed to create account");
@@ -103,11 +133,49 @@ export default function Login({ onLoginSuccess }) {
         }));
       }
     } catch (err) {
-      setErrorMessage(err.message || "An unexpected error occurred. Please try again.");
+      setErrorMessage(
+        err instanceof TypeError && err.message === "Failed to fetch"
+          ? "Unable to reach the server. Please start the backend and try again."
+          : err.message || "An unexpected error occurred. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
+
+  if (authView === "welcome") {
+    return (
+      <div className="welcome-screen">
+        <section className="welcome-brand" aria-labelledby="library-title">
+          <p className="brand-kicker">A quieter way to read</p>
+          <h1 id="library-title">
+            Open Library
+            <span>2.0</span>
+          </h1>
+          <p className="brand-note">Your books, your pace, your place.</p>
+        </section>
+
+        <section className="welcome-panel" aria-label="Account options">
+          <div className="account-option">
+            <p>Have an account?</p>
+            <button type="button" onClick={() => openAuthForm("login")}>
+              Sign In
+            </button>
+          </div>
+
+          <div className="account-option account-option-secondary">
+            <p>Don&apos;t have an account?</p>
+            <button type="button" onClick={() => openAuthForm("signup", "MEMBER")}>
+              Member Sign Up
+            </button>
+            <button type="button" onClick={() => openAuthForm("signup", "ADMIN")}>
+              Admin Sign Up
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-page">
@@ -268,6 +336,13 @@ export default function Login({ onLoginSuccess }) {
             </form>
 
             <div className="auth-footer">
+              <button
+                type="button"
+                onClick={() => setAuthView("welcome")}
+                className="btn-link back-link"
+              >
+                Back to welcome
+              </button>
               <p>
                 {isLoginMode ? "Don't have an account? " : "Already have an account? "}
                 <button
