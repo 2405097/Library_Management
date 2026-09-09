@@ -20,6 +20,35 @@ function colorFromString(str = "") {
   return `hsl(${h}, 55%, 62%)`;
 }
 
+function BookReviewForm({ target, draft, setDraft, onSubmit, onCancel, message }) {
+  return (
+    <form className="lib-book-review-form" onSubmit={onSubmit}>
+      <div className="lib-book-review-heading">
+        <div>
+          <span>Reviewing</span>
+          <strong>{target.title}</strong>
+        </div>
+        <button type="button" className="lib-close-btn" onClick={onCancel} aria-label="Close review form">✕</button>
+      </div>
+      <label>
+        Rating
+        <select value={draft.rating} onChange={(e) => setDraft((current) => ({ ...current, rating: Number(e.target.value) }))}>
+          {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} / 5</option>)}
+        </select>
+      </label>
+      <label>
+        Written review
+        <textarea value={draft.comment} onChange={(e) => setDraft((current) => ({ ...current, comment: e.target.value }))} placeholder="Share what you thought about this book..." required />
+      </label>
+      {message && <p className="lib-review-message" role="status">{message}</p>}
+      <div className="lib-book-review-actions">
+        <button type="button" className="lib-secondary-action" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="lib-primary-action">Submit review</button>
+      </div>
+    </form>
+  );
+}
+
 export default function Dashboard({ user, onLogout }) {
   // ── search state ──────────────────────────────────────────────
   const [searchField, setSearchField] = useState("title");
@@ -42,6 +71,8 @@ export default function Dashboard({ user, onLogout }) {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [newReviewData, setNewReviewData] = useState({ rating: 5, reportDetails: "" });
   const [reviewMsg, setReviewMsg] = useState("");
+  const [bookReviewTarget, setBookReviewTarget] = useState(null);
+  const [bookReviewDraft, setBookReviewDraft] = useState({ rating: 5, comment: "" });
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
 
@@ -269,6 +300,39 @@ export default function Dashboard({ user, onLogout }) {
     setTimeout(() => setReviewMsg(""), 3000);
   };
 
+  const openBookReview = (bookID, title) => {
+    setBookReviewTarget({ bookID, title });
+    setBookReviewDraft({ rating: 5, comment: "" });
+    setReviewMsg("");
+  };
+
+  const submitBookReview = async (e) => {
+    e.preventDefault();
+    if (!bookReviewTarget || !bookReviewDraft.comment.trim()) return;
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({
+          bookID: Number(bookReviewTarget.bookID),
+          rating: Number(bookReviewDraft.rating),
+          comment: bookReviewDraft.comment.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to submit review.');
+      setBookReviews((current) => [{ ...data.review, book_name: bookReviewTarget.title }, ...current]);
+      setBookReviewTarget(null);
+      setReviewMsg('Book review submitted.');
+    } catch (error) {
+      setReviewMsg(error.message);
+    }
+  };
+
   // ── nav menu items ────────────────────────────────────────────
   const menuItems = [
     { key: "user_info", label: "User Information" },
@@ -279,6 +343,7 @@ export default function Dashboard({ user, onLogout }) {
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
+  const hasReviewedBook = (bookID) => bookReviews.some((review) => String(review.book_id) === String(bookID));
 
   return (
     <div className="lib-root">
@@ -404,6 +469,7 @@ export default function Dashboard({ user, onLogout }) {
             {/* Borrow Records */}
             {activeSection === "borrow_record" && (
               <div className="lib-table-wrap">
+                {bookReviewTarget && <BookReviewForm target={bookReviewTarget} draft={bookReviewDraft} setDraft={setBookReviewDraft} onSubmit={submitBookReview} onCancel={() => setBookReviewTarget(null)} message={reviewMsg} />}
                 {borrowRecords.length === 0 ? (
                   <div className="lib-empty">No borrow records found.</div>
                 ) : (
@@ -411,7 +477,7 @@ export default function Dashboard({ user, onLogout }) {
                     <thead>
                       <tr>
                         <th>ID</th><th>Book</th><th>Borrow Date</th>
-                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th>Status</th>
+                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th>Status</th><th>Review</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -424,6 +490,7 @@ export default function Dashboard({ user, onLogout }) {
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
                           <td>${Number(r.delayFee || 0).toFixed(2)}</td>
                           <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status}</span></td>
+                          <td>{hasReviewedBook(r.bookID) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(r.bookID, r.bookName || `Book #${r.bookID}`)}>Review</button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -460,12 +527,13 @@ export default function Dashboard({ user, onLogout }) {
             {/* Orders */}
             {activeSection === "order_info" && (
               <div className="lib-table-wrap">
+                {bookReviewTarget && <BookReviewForm target={bookReviewTarget} draft={bookReviewDraft} setDraft={setBookReviewDraft} onSubmit={submitBookReview} onCancel={() => setBookReviewTarget(null)} message={reviewMsg} />}
                 {orderInfo.length === 0 ? (
                   <div className="lib-empty">No orders found.</div>
                 ) : (
                   <table className="lib-table">
                     <thead>
-                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th></tr>
+                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th><th>Review</th></tr>
                     </thead>
                     <tbody>
                       {orderInfo.map((o) => (
@@ -477,6 +545,7 @@ export default function Dashboard({ user, onLogout }) {
                           <td>{formatDate(o.orderDate)}</td>
                           <td>${Number(o.price || 0).toFixed(2)}</td>
                           <td>{o.status === "PENDING" ? "Placed order not confirmed yet" : "Approved"}</td>
+                          <td>{o.status !== "APPROVED" ? <span className="lib-review-pending">Available after approval</span> : hasReviewedBook(o.book_id) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(o.book_id, o.book_name)}>Review</button>}</td>
                         </tr>
                       ))}
                     </tbody>

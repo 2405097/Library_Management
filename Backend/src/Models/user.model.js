@@ -444,15 +444,19 @@ export const getBookReviewsByUserId = async (userID) => {
 
 export const createBookReview = async (userID, bookID, rating, comment) => {
   const query = `
-    WITH eligible_borrow AS (
+    WITH eligible_book AS (
       SELECT 1
       FROM borrow_record
       WHERE "userID" = $1 AND "bookID" = $2
+      UNION ALL
+      SELECT 1
+      FROM "ORDER"
+      WHERE "userID" = $1 AND "bookID" = $2 AND status = 'APPROVED'
       LIMIT 1
     )
     INSERT INTO book_review ("userID", "bookID", rating, comment)
     SELECT $1, $2, $3, $4
-    WHERE EXISTS (SELECT 1 FROM eligible_borrow)
+    WHERE EXISTS (SELECT 1 FROM eligible_book)
     RETURNING "reviewID", rating, comment, "createdAt", "bookID" AS book_id;
   `;
   const { rows } = await pool.query(query, [userID, bookID, rating, comment]);

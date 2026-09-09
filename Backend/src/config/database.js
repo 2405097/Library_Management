@@ -53,6 +53,10 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS book_review_one_per_member_book
+        ON book_review ("userID", "bookID");
+      `);
       return;
     }
 

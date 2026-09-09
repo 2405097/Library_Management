@@ -311,11 +311,14 @@ export const createBookReviewForUser = async (req, res) => {
       String(comment).trim()
     );
     if (!review) {
-      return res.status(403).json({ message: 'You can review a book only after borrowing it' });
+      return res.status(403).json({ message: 'You can review a book only after borrowing it or receiving order approval' });
     }
 
     res.status(201).json({ message: 'Book review created successfully', review });
   } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'You have already reviewed this book' });
+    }
     res.status(500).json({ message: error.message });
   }
 };

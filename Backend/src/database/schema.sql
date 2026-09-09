@@ -93,6 +93,9 @@ CREATE TABLE BOOK_REVIEW (
   "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE CASCADE
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS book_review_one_per_member_book
+  ON BOOK_REVIEW ("userID", "bookID");
+
 -- Stores revoked JWTs to support genuine server-side logout
 CREATE TABLE REVOKED_TOKEN (
   token TEXT PRIMARY KEY,
