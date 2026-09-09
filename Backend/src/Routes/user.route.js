@@ -8,8 +8,11 @@ import {
   loginUser,
   logoutUser,
   getBorrowRecordsByUser,
+  borrowBookForUser,
   getBookReviewsByUser,
+  createBookReviewForUser,
   getOrdersByUser,
+  createOrderForUser,
   getLibraryReviewsByUser,
   createLibraryReviewForUser,
 } from '../Controllers/user.controller.js';
@@ -45,11 +48,18 @@ router.put('/:id', authenticate, authorizeSelfOrAdmin, updateUserDetails);
 // GET /api/users/:id/borrow-records
 router.get('/:id/borrow-records', authenticate, authorizeSelfOrAdmin, getBorrowRecordsByUser);
 
+// POST /api/users/:id/borrow - borrowing is immediate; no admin approval is required
+router.post('/:id/borrow', authenticate, authorizeSelfOrAdmin, borrowBookForUser);
+
 // GET /api/users/:id/book-reviews
 router.get('/:id/book-reviews', authenticate, authorizeSelfOrAdmin, getBookReviewsByUser);
 
+// POST /api/users/:id/book-reviews - only allowed for books this user borrowed
+router.post('/:id/book-reviews', authenticate, authorizeSelfOrAdmin, createBookReviewForUser);
+
 // GET /api/users/:id/orders
 router.get('/:id/orders', authenticate, authorizeSelfOrAdmin, getOrdersByUser);
+router.post('/:id/orders', authenticate, authorizeSelfOrAdmin, createOrderForUser);
 
 // GET /api/users/:id/library-reviews
 router.get('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, getLibraryReviewsByUser);
@@ -58,4 +68,4 @@ router.get('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, getLibrar
 router.post('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, createLibraryReviewForUser);
 
 export default router;
-
+

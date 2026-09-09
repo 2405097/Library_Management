@@ -41,6 +41,18 @@ export const initializeDatabase = async () => {
           "revokedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "borrowDate" TYPE TIMESTAMP WITH TIME ZONE USING "borrowDate"::TIMESTAMP WITH TIME ZONE,
+        ALTER COLUMN "dueDate" TYPE TIMESTAMP WITH TIME ZONE USING "dueDate"::TIMESTAMP WITH TIME ZONE,
+        ALTER COLUMN "returnDate" TYPE TIMESTAMP WITH TIME ZONE USING
+          CASE WHEN "returnDate" IS NULL THEN NULL ELSE "returnDate"::TIMESTAMP WITH TIME ZONE END;
+      `);
+      await pool.query(`
+        ALTER TABLE "ORDER"
+        ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+      `);
       return;
     }
 

@@ -133,6 +133,36 @@ export default function Dashboard({ user, onLogout }) {
     goHome();
   };
 
+  const handleBorrow = async (book) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/borrow`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify({ bookID: book.bookID }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not borrow this book.');
+    setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
+    setBorrowRecords((current) => [data.record, ...current]);
+    window.alert(`"${book.title}" borrowed successfully.`);
+  };
+
+  const handleOrder = async (book) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      body: JSON.stringify({ bookID: book.bookID, quantity: 1 }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not place this order.');
+    setOrderInfo((current) => [{ ...data.order, book_name: book.title, author_name: book.authorName, publisher_name: book.publisher }, ...current]);
+    window.alert('Order placed. It is waiting for admin confirmation.');
+  };
+
   const handleSelectBook = (bookOrId) => {
     const id = typeof bookOrId === "object" && bookOrId !== null ? bookOrId.bookID : bookOrId;
     if (typeof bookOrId === "object" && bookOrId !== null) {
@@ -435,7 +465,7 @@ export default function Dashboard({ user, onLogout }) {
                 ) : (
                   <table className="lib-table">
                     <thead>
-                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th></tr>
+                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                       {orderInfo.map((o) => (
@@ -446,6 +476,7 @@ export default function Dashboard({ user, onLogout }) {
                           <td>{o.publisher_name || "—"}</td>
                           <td>{formatDate(o.orderDate)}</td>
                           <td>${Number(o.price || 0).toFixed(2)}</td>
+                          <td>{o.status === "PENDING" ? "Placed order not confirmed yet" : "Approved"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -524,6 +555,8 @@ export default function Dashboard({ user, onLogout }) {
             book={selectedBook}
             bookId={selectedBookId}
             onBack={handleBackFromBook}
+            onBorrow={handleBorrow}
+            onOrder={handleOrder}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">

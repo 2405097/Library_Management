@@ -20,6 +20,8 @@ export default function AdminDashboard({ user, onLogout }) {
   const [bookInfo, setBookInfo] = useState([]);
   const [borrowBookInfo, setBorrowBookInfo] = useState([]);
   const [orderedBookInfo, setOrderedBookInfo] = useState([]);
+  const [returningBorrowID, setReturningBorrowID] = useState(null);
+  const [approvingOrderID, setApprovingOrderID] = useState(null);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -59,6 +61,56 @@ export default function AdminDashboard({ user, onLogout }) {
 
     fetchAdminData();
   }, []);
+
+  const processReturn = async (borrowID) => {
+    setReturningBorrowID(borrowID);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/borrow-records/${borrowID}/return`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not process return.');
+      setBorrowBookInfo((current) => current.map((item) =>
+        String(item.borrowid || item.borrowID) === String(borrowID)
+          ? { ...item, status: data.record.status, returndate: data.record.returnDate, returnDate: data.record.returnDate }
+          : item
+      ));
+      setBookInfo((current) => current.map((item) =>
+        String(item.bookid || item.bookID) === String(data.record.bookID)
+          ? { ...item, availablecopies: Number(item.availablecopies ?? item.availableCopies ?? 0) + 1 }
+          : item
+      ));
+      setSummary((current) => ({ ...current, active_borrow_records: Math.max(0, Number(current.active_borrow_records || 0) - 1) }));
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setReturningBorrowID(null);
+    }
+  };
+
+  const approveOrder = async (purchaseNo) => {
+    setApprovingOrderID(purchaseNo);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/orders/${purchaseNo}/approve`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not approve order.');
+      setOrderedBookInfo((current) => current.map((item) =>
+        String(item.purchaseno || item.purchaseNo) === String(purchaseNo)
+          ? { ...item, status: data.order.status, approvedAt: data.order.approvedAt }
+          : item
+      ));
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setApprovingOrderID(null);
+    }
+  };
 
   const adminInfo = [
     { label: "Admin ID", value: user?.userID ?? "N/A" },
@@ -154,6 +206,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <th>Genre</th>
                     <th>Author</th>
                     <th>Publisher</th>
+                    <th>Status / Action</th>
                     <th>Available Copies</th>
                     <th>Price</th>
                   </tr>
@@ -190,6 +243,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     <th>Return Date</th>
                     <th>Status</th>
                     <th>Delay Fee</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -202,6 +256,15 @@ export default function AdminDashboard({ user, onLogout }) {
                       <td>{item.returndate || item.returnDate || "Not returned"}</td>
                       <td>{item.status || "N/A"}</td>
                       <td>${Number(item.delayfee || item.delayFee || 0).toFixed(2)}</td>
+                      <td>
+                        {(item.status || "").toUpperCase() === "BORROWED" ? (
+                          <button type="button" className="btn btn-primary small-btn" disabled={returningBorrowID === (item.borrowid || item.borrowID)} onClick={() => processReturn(item.borrowid || item.borrowID)}>
+                            {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : "Process Return"}
+                          </button>
+                        ) : (
+                          <span>{item.returndate || item.returnDate || "Returned"}</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -236,6 +299,13 @@ export default function AdminDashboard({ user, onLogout }) {
                       <td>{item.quantity || 1}</td>
                       <td>${Number(item.price || 0).toFixed(2)}</td>
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>
+                      <td>
+                        {(item.status || "PENDING") === "PENDING" ? (
+                          <button type="button" className="btn btn-primary small-btn" disabled={approvingOrderID === (item.purchaseno || item.purchaseNo)} onClick={() => approveOrder(item.purchaseno || item.purchaseNo)}>
+                            {approvingOrderID === (item.purchaseno || item.purchaseNo) ? "Approving..." : "Approve Order"}
+                          </button>
+                        ) : <span>Approved</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

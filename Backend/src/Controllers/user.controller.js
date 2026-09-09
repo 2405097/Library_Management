@@ -11,7 +11,10 @@ import {
   updateUser,
   deleteUser,
   getBorrowRecordsByUserId,
+  borrowBook,
+  returnBorrowedBook,
   getBookReviewsByUserId,
+  createBookReview,
   getOrdersByUserId,
   getLibraryReviewsByUserId,
   createLibraryReview,
@@ -19,13 +22,17 @@ import {
   getAdminSummary,
   getAdminBooks,
   getAdminBorrowRecords,
-  getAdminOrders
+  getAdminOrders,
+  createOrder,
+  approveOrder,
+  updateUserCredentials
 } from '../Models/user.model.js';
 
 // Login user — verifies bcrypt password, issues signed JWT
 export const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const { password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
@@ -36,10 +43,20 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Verify password against bcrypt hash stored in DB
-    const passwordMatch = await bcrypt.compare(password, user.passHash);
+    // Verify bcrypt credentials. Older imported accounts may contain plaintext
+    // passwords; migrate those values after the first successful login.
+    const isBcryptHash = typeof user.passHash === 'string' && /^\$2[aby]\$/.test(user.passHash);
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, user.passHash)
+      : password === user.passHash;
     if (!passwordMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    if (!isBcryptHash) {
+      await updateUserCredentials(user.userID, {
+        passHash: await bcrypt.hash(password, 10),
+      });
     }
 
     // Update last login timestamp
@@ -104,14 +121,16 @@ export const getUser = async (req, res) => {
 // Create new user — password is bcrypt-hashed before storage
 export const createNewUser = async (req, res) => {
   try {
-    const { name, email, phone, address, role = 'MEMBER', password, passHash, username } = req.body;
+    const { name, phone, address, role = 'MEMBER', password, passHash, username } = req.body;
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     
-    if (!name || !email || (!password && !passHash)) {
+    if (!normalizedName || !normalizedEmail || (!password && !passHash)) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
     }
 
     // Check if user exists
-    const existingUser = await findUserByEmail(email);
+    const existingUser = await findUserByEmail(normalizedEmail);
     if (existingUser) {
       return res.status(409).json({ message: 'User with this email already exists' });
     }
@@ -121,8 +140,8 @@ export const createNewUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const user = await createUser({
-      name,
-      email,
+      name: normalizedName,
+      email: normalizedEmail,
       phone: phone || null,
       address: address || null,
       role: role || 'MEMBER',
@@ -267,6 +286,88 @@ export const getAdminOrderData = async (req, res) => {
   try {
     const orders = await getAdminOrders();
     res.status(200).json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createBookReviewForUser = async (req, res) => {
+  try {
+    const { bookID, rating, comment } = req.body;
+    const numericBookID = Number(bookID);
+    const numericRating = Number(rating);
+
+    if (!Number.isInteger(numericBookID) || !comment || !String(comment).trim()) {
+      return res.status(400).json({ message: 'Book and review comment are required' });
+    }
+    if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+
+    const review = await createBookReview(
+      req.params.id,
+      numericBookID,
+      numericRating,
+      String(comment).trim()
+    );
+    if (!review) {
+      return res.status(403).json({ message: 'You can review a book only after borrowing it' });
+    }
+
+    res.status(201).json({ message: 'Book review created successfully', review });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const borrowBookForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.body.bookID);
+    if (!Number.isInteger(bookID)) {
+      return res.status(400).json({ message: 'A valid book ID is required' });
+    }
+    const record = await borrowBook(req.params.id, bookID);
+    if (!record) {
+      return res.status(409).json({ message: 'This book is currently unavailable' });
+    }
+    res.status(201).json({ message: 'Book borrowed successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const returnBookForAdmin = async (req, res) => {
+  try {
+    const record = await returnBorrowedBook(Number(req.params.borrowID));
+    if (!record) {
+      return res.status(409).json({ message: 'This borrow record has already been returned' });
+    }
+    res.status(200).json({ message: 'Book return processed successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createOrderForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.body.bookID);
+    const quantity = Number(req.body.quantity || 1);
+    if (!Number.isInteger(bookID) || !Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({ message: 'A valid book and quantity are required' });
+    }
+    const order = await createOrder(req.params.id, bookID, quantity);
+    if (!order) return res.status(404).json({ message: 'Book not found' });
+    res.status(201).json({ message: 'Order placed and awaiting admin confirmation', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const approveOrderForAdmin = async (req, res) => {
+  try {
+    const order = await approveOrder(Number(req.params.purchaseNo));
+    if (!order) return res.status(409).json({ message: 'This order is already approved or does not exist' });
+    res.status(200).json({ message: 'Order approved successfully', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

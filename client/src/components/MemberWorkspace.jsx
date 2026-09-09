@@ -130,11 +130,13 @@ export default function MemberWorkspace({ user, onLogout }) {
   useEffect(() => {
     if (!user?.userID) return;
     const base = `/api/users/${user.userID}`;
+    const token = localStorage.getItem("library_token");
+    const headers = token ? { Authorization: "Bearer " + token } : {};
     Promise.all([
-      fetch(`${base}/borrow-records`),
-      fetch(`${base}/book-reviews`),
-      fetch(`${base}/orders`),
-      fetch(`${base}/library-reviews`),
+      fetch(`${base}/borrow-records`, { headers }),
+      fetch(`${base}/book-reviews`, { headers }),
+      fetch(`${base}/orders`, { headers }),
+      fetch(`${base}/library-reviews`, { headers }),
     ]).then(async ([borrowRes, reviewRes, orderRes, libraryRes]) => {
       setBorrowRecords(borrowRes.ok ? await borrowRes.json() : []);
       setBookReviews(reviewRes.ok ? await reviewRes.json() : []);
@@ -148,6 +150,20 @@ export default function MemberWorkspace({ user, onLogout }) {
     if (!normalizedQuery) return books;
     return books.filter((book) => getBookValue(book, searchField).toLowerCase().includes(normalizedQuery));
   }, [books, query, searchField]);
+
+  const borrowedBooks = useMemo(() => {
+    const seen = new Set();
+    return borrowRecords
+      .filter((record) => {
+        if (seen.has(String(record.bookID))) return false;
+        seen.add(String(record.bookID));
+        return true;
+      })
+      .map((record) => ({
+        bookID: record.bookID,
+        title: record.bookName || `Book #${record.bookID}`,
+      }));
+  }, [borrowRecords]);
 
   const showNotice = (message) => {
     setNotice(message);
@@ -206,13 +222,32 @@ export default function MemberWorkspace({ user, onLogout }) {
     showNotice("Your library review was submitted.");
   };
 
-  const submitBookReview = (event) => {
+  const submitBookReview = async (event) => {
     event.preventDefault();
-    const book = books.find((item) => String(item.bookID) === String(bookReview.bookID));
+    const book = borrowedBooks.find((item) => String(item.bookID) === String(bookReview.bookID));
     if (!book || !bookReview.comment.trim()) return;
-    setBookReviews((current) => [{ reviewID: Date.now(), book_name: book.title, createdAt: new Date().toISOString(), ...bookReview }, ...current]);
-    setBookReview({ bookID: "", rating: 5, comment: "" });
-    showNotice("Your book review was submitted.");
+    try {
+      const token = localStorage.getItem("library_token");
+      const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
+        body: JSON.stringify({
+          bookID: Number(bookReview.bookID),
+          rating: Number(bookReview.rating),
+          comment: bookReview.comment.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not submit review");
+      setBookReviews((current) => [{ ...data.review, book_name: book.title }, ...current]);
+      setBookReview({ bookID: "", rating: 5, comment: "" });
+      showNotice("Your book review was submitted.");
+    } catch (error) {
+      showNotice(error.message || "Could not submit review.");
+    }
   };
 
   const confirmPurchase = () => {

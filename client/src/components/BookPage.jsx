@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import "./BookPage.css";
 import messageCircleIcon from "../assets/message-circle.svg";
 
-export default function BookPage({ book: initialBook, bookId, onBack }) {
+export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, onOrder }) {
   const [book, setBook] = useState(initialBook || null);
   const [olData, setOlData] = useState(null);
   const [synopsis, setSynopsis] = useState("");
@@ -12,6 +12,8 @@ export default function BookPage({ book: initialBook, bookId, onBack }) {
   const [userStars, setUserStars] = useState(0);
   const [hoverStars, setHoverStars] = useState(0);
   const [activeTab, setActiveTab] = useState("overview");
+  const [borrowing, setBorrowing] = useState(false);
+  const [ordering, setOrdering] = useState(false);
 
   const effectiveBookId = bookId || initialBook?.bookID;
   const cleanIsbn = book?.ISBN ? String(book.ISBN).replace(/[^0-9X]/gi, "") : "";
@@ -214,6 +216,30 @@ export default function BookPage({ book: initialBook, bookId, onBack }) {
   const places = olData?.subject_places?.slice(0, 4).map((p) => (typeof p === "string" ? p : p.name)) || [];
   const times = olData?.subject_times?.slice(0, 4).map((t) => (typeof t === "string" ? t : t.name)) || [];
 
+  const handleBorrow = async () => {
+    if (!onBorrow || borrowing) return;
+    setBorrowing(true);
+    try {
+      await onBorrow(book);
+    } catch (error) {
+      window.alert(error.message || "Could not borrow this book.");
+    } finally {
+      setBorrowing(false);
+    }
+  };
+
+  const handleOrder = async () => {
+    if (!onOrder || ordering) return;
+    setOrdering(true);
+    try {
+      await onOrder(book);
+    } catch (error) {
+      window.alert(error.message || "Could not place this order.");
+    } finally {
+      setOrdering(false);
+    }
+  };
+
   return (
     <div className="book-page-wrapper">
       {/* ── BREADCRUMB & BACK NAV ── */}
@@ -281,14 +307,15 @@ export default function BookPage({ book: initialBook, bookId, onBack }) {
               </div>
             </div>
 
-            {/* Borrow Split Button (Placeholder) */}
+            {/* Borrowing is immediate; return processing is admin-only. */}
             <div className="bp-borrow-group">
               <button
                 type="button"
                 className="bp-btn-borrow"
-                onClick={() => alert(`Borrow request for "${book.title}" recorded. Borrow workflow will be activated soon!`)}
+                onClick={handleBorrow}
+                disabled={borrowing || Number(book.availableCopies) <= 0}
               >
-                Borrow
+                {borrowing ? "Borrowing..." : Number(book.availableCopies) > 0 ? "Borrow" : "Unavailable"}
               </button>
               <button
                 type="button"
@@ -299,6 +326,10 @@ export default function BookPage({ book: initialBook, bookId, onBack }) {
                 ▼
               </button>
             </div>
+
+            <button type="button" className="bp-btn-list" onClick={handleOrder} disabled={ordering}>
+              {ordering ? "Placing order..." : `Order book · $${Number(book.price || 0).toFixed(2)}`}
+            </button>
 
             {/* Add to List Button (Placeholder) */}
             <div className="bp-list-group">
