@@ -349,12 +349,13 @@ export const getBorrowRecordsByUserId = async (userID) => {
       br."returnDate",
       br."delayFee",
       br.status,
+      br."approvedAt",
       br."bookID",
       b.title AS "bookName"
     FROM borrow_record br
     LEFT JOIN book b ON b."bookID" = br."bookID"
     WHERE br."userID" = $1
-    ORDER BY br."borrowDate" DESC;
+    ORDER BY br."borrowID" DESC;
   `;
   const { rows } = await pool.query(query, [userID]);
   return rows;
@@ -364,6 +365,30 @@ export const borrowBook = async (userID, bookID) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Serialize requests for the same user/book pair so concurrent clicks
+    // cannot create duplicate active or pending borrow records.
+    await client.query(
+      'SELECT pg_advisory_xact_lock($1::integer, $2::integer)',
+      [userID, bookID]
+    );
+
+    const activeBorrowResult = await client.query(
+      `SELECT "borrowID", status
+       FROM borrow_record
+       WHERE "userID" = $1
+         AND "bookID" = $2
+         AND status IN ('PENDING', 'BORROWED', 'OVERDUE')
+       LIMIT 1
+       FOR UPDATE`,
+      [userID, bookID]
+    );
+    if (activeBorrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      const isPending = activeBorrowResult.rows[0].status === 'PENDING';
+      return { alreadyBorrowed: true, alreadyPending: isPending };
+    }
+
     const bookResult = await client.query(
       `UPDATE book
        SET "availableCopies" = "availableCopies" - 1
@@ -378,9 +403,69 @@ export const borrowBook = async (userID, bookID) => {
 
     const borrowResult = await client.query(
       `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID")
-       VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '14 days', 'BORROWED', $1, $2)
-       RETURNING "borrowID", "borrowDate", "dueDate", "returnDate", status, "userID", "bookID"`,
+       VALUES (NULL, NULL, 'PENDING', $1, $2)
+       RETURNING "borrowID", "borrowDate", "dueDate", "returnDate", status, "userID", "bookID", "approvedAt"`,
       [userID, bookID]
+    );
+    await client.query('COMMIT');
+    return borrowResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const approveBorrow = async (borrowID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const borrowResult = await client.query(
+      `UPDATE borrow_record
+       SET status = 'BORROWED',
+           "borrowDate" = CURRENT_TIMESTAMP,
+           "dueDate" = CURRENT_TIMESTAMP + INTERVAL '14 days',
+           "approvedAt" = CURRENT_TIMESTAMP
+       WHERE "borrowID" = $1 AND status = 'PENDING'
+       RETURNING "borrowID", "bookID", "borrowDate", "dueDate", "returnDate", "delayFee", "approvedAt", status`,
+      [borrowID]
+    );
+    if (!borrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    await client.query('COMMIT');
+    return borrowResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const rejectBorrow = async (borrowID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const borrowResult = await client.query(
+      `UPDATE borrow_record
+       SET status = 'REJECTED'
+       WHERE "borrowID" = $1 AND status = 'PENDING'
+       RETURNING "borrowID", "bookID", "borrowDate", "dueDate", "returnDate", "delayFee", status`,
+      [borrowID]
+    );
+    if (!borrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `UPDATE book
+       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + 1)
+       WHERE "bookID" = $1`,
+      [borrowResult.rows[0].bookID]
     );
     await client.query('COMMIT');
     return borrowResult.rows[0];
@@ -399,7 +484,7 @@ export const returnBorrowedBook = async (borrowID) => {
     const borrowResult = await client.query(
       `UPDATE borrow_record
        SET "returnDate" = CURRENT_TIMESTAMP, status = 'RETURNED'
-       WHERE "borrowID" = $1 AND status = 'BORROWED'
+       WHERE "borrowID" = $1 AND status IN ('BORROWED', 'OVERDUE')
        RETURNING "borrowID", "bookID", "returnDate", status`,
       [borrowID]
     );
@@ -447,7 +532,7 @@ export const createBookReview = async (userID, bookID, rating, comment) => {
     WITH eligible_borrow AS (
       SELECT 1
       FROM borrow_record
-      WHERE "userID" = $1 AND "bookID" = $2
+      WHERE "userID" = $1 AND "bookID" = $2 AND status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')
       LIMIT 1
     )
     INSERT INTO book_review ("userID", "bookID", rating, comment)
@@ -529,6 +614,7 @@ export const getAdminSummary = async () => {
       (SELECT COUNT(*) FROM users) AS total_users,
       (SELECT COUNT(*) FROM book) AS total_books,
       (SELECT COUNT(*) FROM borrow_record WHERE status = 'BORROWED') AS active_borrow_records,
+      (SELECT COUNT(*) FROM borrow_record WHERE status = 'PENDING') AS pending_borrow_requests,
       (SELECT COUNT(*) FROM "ORDER") AS total_orders,
       (SELECT COUNT(*) FROM library_review) AS total_library_reviews;
   `;
@@ -567,6 +653,8 @@ export const getAdminBorrowRecords = async () => {
       br."returnDate",
       br.status,
       br."delayFee",
+      br."approvedAt",
+      br."bookID",
       u.name AS member_name,
       b.title AS book_name
     FROM borrow_record br

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import "./BookPage.css";
 import messageCircleIcon from "../assets/message-circle.svg";
 
-export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, onOrder }) {
+export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, onOrder, onReview }) {
   const [book, setBook] = useState(initialBook || null);
   const [olData, setOlData] = useState(null);
   const [synopsis, setSynopsis] = useState("");
@@ -307,7 +307,7 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
               </div>
             </div>
 
-            {/* Borrowing is immediate; return processing is admin-only. */}
+            {/* Borrowing requires admin approval; return processing is admin-only. */}
             <div className="bp-borrow-group">
               <button
                 type="button"
@@ -315,7 +315,7 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
                 onClick={handleBorrow}
                 disabled={borrowing || Number(book.availableCopies) <= 0}
               >
-                {borrowing ? "Borrowing..." : Number(book.availableCopies) > 0 ? "Borrow" : "Unavailable"}
+                {borrowing ? "Submitting..." : Number(book.availableCopies) > 0 ? "Borrow" : "Unavailable"}
               </button>
               <button
                 type="button"
@@ -372,7 +372,7 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
               <button
                 type="button"
                 className="bp-action-item"
-                onClick={() => alert("Member review system is active in your Member Drawer.")}
+                onClick={() => onReview?.(book)}
               >
                 <img src={messageCircleIcon} alt="" className="bp-action-icon-img" aria-hidden="true" />
                 <span>Review</span>
@@ -531,7 +531,7 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
             {/* Local Library Inventory Info Card */}
             <div className="bp-local-inventory">
               <h4 className="bp-local-inventory-title">
-                📚 Central Library Availability &amp; Catalog
+                 Central Library Availability &amp; Catalog
               </h4>
               <div className="bp-inventory-grid">
                 <div className="bp-inv-item">

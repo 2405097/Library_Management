@@ -12,6 +12,8 @@ import {
   deleteUser,
   getBorrowRecordsByUserId,
   borrowBook,
+  approveBorrow,
+  rejectBorrow,
   returnBorrowedBook,
   getBookReviewsByUserId,
   createBookReview,
@@ -327,10 +329,40 @@ export const borrowBookForUser = async (req, res) => {
       return res.status(400).json({ message: 'A valid book ID is required' });
     }
     const record = await borrowBook(req.params.id, bookID);
+    if (record?.alreadyPending) {
+      return res.status(409).json({ message: 'You already have a pending borrow request for this book' });
+    }
+    if (record?.alreadyBorrowed) {
+      return res.status(409).json({ message: 'You already have this book borrowed' });
+    }
     if (!record) {
       return res.status(409).json({ message: 'This book is currently unavailable' });
     }
-    res.status(201).json({ message: 'Book borrowed successfully', record });
+    res.status(201).json({ message: 'Borrow request placed and awaiting admin approval', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const approveBorrowForAdmin = async (req, res) => {
+  try {
+    const record = await approveBorrow(Number(req.params.borrowID));
+    if (!record) {
+      return res.status(409).json({ message: 'This borrow request is already processed or does not exist' });
+    }
+    res.status(200).json({ message: 'Borrow request approved successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const rejectBorrowForAdmin = async (req, res) => {
+  try {
+    const record = await rejectBorrow(Number(req.params.borrowID));
+    if (!record) {
+      return res.status(409).json({ message: 'This borrow request is already processed or does not exist' });
+    }
+    res.status(200).json({ message: 'Borrow request rejected successfully', record });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

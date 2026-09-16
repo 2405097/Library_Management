@@ -53,6 +53,36 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+      `);
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'borrow_record'::regclass AND conname = 'borrow_record_status_check'
+          ) THEN
+            ALTER TABLE borrow_record DROP CONSTRAINT borrow_record_status_check;
+          END IF;
+          ALTER TABLE borrow_record
+          ADD CONSTRAINT borrow_record_status_check
+          CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'OVERDUE', 'LOST', 'REJECTED'));
+        END $$;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN status SET DEFAULT 'PENDING';
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "borrowDate" DROP NOT NULL;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "dueDate" DROP NOT NULL;
+      `);
       return;
     }
 

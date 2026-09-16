@@ -48,7 +48,7 @@ router.put('/:id', authenticate, authorizeSelfOrAdmin, updateUserDetails);
 // GET /api/users/:id/borrow-records
 router.get('/:id/borrow-records', authenticate, authorizeSelfOrAdmin, getBorrowRecordsByUser);
 
-// POST /api/users/:id/borrow - borrowing is immediate; no admin approval is required
+// POST /api/users/:id/borrow - place a borrow request awaiting admin approval
 router.post('/:id/borrow', authenticate, authorizeSelfOrAdmin, borrowBookForUser);
 
 // GET /api/users/:id/book-reviews

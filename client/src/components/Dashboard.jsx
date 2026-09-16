@@ -42,6 +42,8 @@ export default function Dashboard({ user, onLogout }) {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [newReviewData, setNewReviewData] = useState({ rating: 5, reportDetails: "" });
   const [reviewMsg, setReviewMsg] = useState("");
+  const [newBookReviewData, setNewBookReviewData] = useState({ bookID: "", rating: 5, comment: "" });
+  const [bookReviewMsg, setBookReviewMsg] = useState("");
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
 
@@ -134,6 +136,17 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const handleBorrow = async (book) => {
+    const activeRecord = borrowRecords.find(
+      (record) => String(record.bookID) === String(book.bookID)
+        && ["PENDING", "BORROWED", "OVERDUE"].includes(record.status)
+    );
+    if (activeRecord) {
+      if (activeRecord.status === "PENDING") {
+        throw new Error("You already have a pending borrow request for this book.");
+      }
+      throw new Error("You already have this book borrowed.");
+    }
+
     const token = localStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/borrow`, {
       method: 'POST',
@@ -146,8 +159,11 @@ export default function Dashboard({ user, onLogout }) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not borrow this book.');
     setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
-    setBorrowRecords((current) => [data.record, ...current]);
-    window.alert(`"${book.title}" borrowed successfully.`);
+    setBorrowRecords((current) => [
+      { ...data.record, bookName: book.title },
+      ...current,
+    ]);
+    window.alert(`Borrow request placed for "${book.title}". Waiting for admin approval.`);
   };
 
   const handleOrder = async (book) => {
@@ -177,6 +193,26 @@ export default function Dashboard({ user, onLogout }) {
     if (window.location.pathname !== bookUrl) {
       window.history.pushState({ type: "book", id }, "", bookUrl);
     }
+  };
+
+  const handleReviewBook = (book) => {
+    const hasBorrowedBook = borrowRecords.some(
+      (record) => String(record.bookID) === String(book.bookID)
+        && ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status)
+    );
+
+    if (window.location.pathname.startsWith("/book/")) {
+      window.history.pushState({ type: "home" }, "", "/");
+    }
+    setSelectedBook(null);
+    setSelectedBookId(null);
+    setHasSearched(false);
+    setBookReviewMsg(hasBorrowedBook ? "" : "Borrow this book before submitting a review.");
+    setNewBookReviewData((current) => ({
+      ...current,
+      bookID: hasBorrowedBook ? String(book.bookID) : "",
+    }));
+    setActiveSection("book_review");
   };
 
   const handleBackFromBook = () => {
@@ -269,6 +305,49 @@ export default function Dashboard({ user, onLogout }) {
     setTimeout(() => setReviewMsg(""), 3000);
   };
 
+  const handleBookReviewSubmit = async (e) => {
+    e.preventDefault();
+    const comment = newBookReviewData.comment.trim();
+
+    if (!newBookReviewData.bookID || !comment) {
+      setBookReviewMsg("Choose a borrowed book and write a review first.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("library_token");
+      const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
+        body: JSON.stringify({
+          bookID: Number(newBookReviewData.bookID),
+          rating: Number(newBookReviewData.rating),
+          comment,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not submit book review.");
+      }
+
+      const book = borrowRecords.find(
+        (record) => String(record.bookID) === String(newBookReviewData.bookID)
+      );
+      setBookReviews((current) => [
+        { ...data.review, book_name: book?.bookName || book?.bookID },
+        ...current,
+      ]);
+      setNewBookReviewData({ bookID: "", rating: 5, comment: "" });
+      setBookReviewMsg("Review submitted!");
+    } catch (error) {
+      setBookReviewMsg(error.message || "Could not submit book review.");
+    }
+  };
+
   // ── nav menu items ────────────────────────────────────────────
   const menuItems = [
     { key: "user_info", label: "User Information" },
@@ -279,6 +358,16 @@ export default function Dashboard({ user, onLogout }) {
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
+  const borrowedBookOptions = Array.from(
+    new Map(
+      borrowRecords
+        .filter((record) => ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status))
+        .map((record) => [String(record.bookID), {
+          bookID: record.bookID,
+          bookName: record.bookName || `Book #${record.bookID}`,
+        }])
+    ).values()
+  );
 
   return (
     <div className="lib-root">
@@ -420,10 +509,14 @@ export default function Dashboard({ user, onLogout }) {
                           <td>{r.borrowID}</td>
                           <td>{r.bookName || r.bookID}</td>
                           <td>{formatDate(r.borrowDate)}</td>
-                          <td>{formatDate(r.dueDate)}</td>
+                          <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
                           <td>${Number(r.delayFee || 0).toFixed(2)}</td>
-                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status}</span></td>
+                          <td>
+                            <span className={`status-chip status-${(r.status || "").toLowerCase()}`}>
+                              {r.status === "PENDING" ? "Pending Approval" : r.status}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -434,25 +527,77 @@ export default function Dashboard({ user, onLogout }) {
 
             {/* Book Reviews */}
             {activeSection === "book_review" && (
-              <div className="lib-table-wrap">
+              <div>
+                <div className="lib-review-bar">
+                  <span className="lib-review-msg" aria-live="polite">{bookReviewMsg}</span>
+                </div>
+                <form className="lib-review-form" onSubmit={handleBookReviewSubmit}>
+                  <div className="form-group">
+                    <label htmlFor="book-review-book">Book</label>
+                    <select
+                      id="book-review-book"
+                      value={newBookReviewData.bookID}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, bookID: e.target.value }))}
+                      className="form-control"
+                      required
+                    >
+                      <option value="">Choose a borrowed book</option>
+                      {borrowedBookOptions.map((book) => (
+                        <option key={book.bookID} value={book.bookID}>{book.bookName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="book-review-rating">Rating</label>
+                    <select
+                      id="book-review-rating"
+                      value={newBookReviewData.rating}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, rating: e.target.value }))}
+                      className="form-control"
+                    >
+                      <option value={5}>5 — Excellent</option>
+                      <option value={4}>4 — Good</option>
+                      <option value={3}>3 — Average</option>
+                      <option value={2}>2 — Poor</option>
+                      <option value={1}>1 — Very poor</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="book-review-comment">Your Review</label>
+                    <textarea
+                      id="book-review-comment"
+                      rows={4}
+                      value={newBookReviewData.comment}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, comment: e.target.value }))}
+                      className="form-control"
+                      placeholder="What stayed with you?"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={!borrowedBookOptions.length}>
+                    Submit Book Review
+                  </button>
+                </form>
                 {bookReviews.length === 0 ? (
                   <div className="lib-empty">No book reviews yet.</div>
                 ) : (
-                  <table className="lib-table">
-                    <thead>
-                      <tr><th>Book</th><th>Rating</th><th>Comment</th><th>Date</th></tr>
-                    </thead>
-                    <tbody>
-                      {bookReviews.map((r) => (
-                        <tr key={r.reviewID}>
-                          <td>{r.book_name || r.book_id}</td>
-                          <td>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</td>
-                          <td>{r.comment || "—"}</td>
-                          <td>{formatDate(r.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="lib-table-wrap">
+                    <table className="lib-table">
+                      <thead>
+                        <tr><th>Book</th><th>Rating</th><th>Comment</th><th>Date</th></tr>
+                      </thead>
+                      <tbody>
+                        {bookReviews.map((r) => (
+                          <tr key={r.reviewID}>
+                            <td>{r.book_name || r.book_id}</td>
+                            <td>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</td>
+                            <td>{r.comment || "—"}</td>
+                            <td>{formatDate(r.createdAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -557,6 +702,7 @@ export default function Dashboard({ user, onLogout }) {
             onBack={handleBackFromBook}
             onBorrow={handleBorrow}
             onOrder={handleOrder}
+            onReview={handleReviewBook}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">
