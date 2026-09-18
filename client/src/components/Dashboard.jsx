@@ -5,6 +5,7 @@ import iconBookmarkCheck from "../assets/bookmark-check.svg";
 import iconStar from "../assets/star.svg";
 import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
+import AccountDeletionDialog from "./AccountDeletionDialog";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -28,7 +29,7 @@ function colorFromString(str = "") {
   return `hsl(${h}, 55%, 62%)`;
 }
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   // ── search state ──────────────────────────────────────────────
   const [searchField, setSearchField] = useState("title");
   const [searchValue, setSearchValue] = useState("");
@@ -55,6 +56,7 @@ export default function Dashboard({ user, onLogout }) {
   const [bookReviewMsg, setBookReviewMsg] = useState("");
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const drawerRef = useRef(null);
 
@@ -539,21 +541,32 @@ export default function Dashboard({ user, onLogout }) {
 
             {/* User Info */}
             {activeSection === "user_info" && (
-              <div className="lib-info-grid">
-                {[
-                  ["User ID", `#${user.userID}`],
-                  ["Name", user.name],
-                  ["Email", user.email],
-                  ["Phone", user.phone || "—"],
-                  ["Address", user.address || "—"],
-                  ["Role", user.role || "MEMBER"],
-                  ["Member Since", formatDate(user.createdAt)],
-                ].map(([label, val]) => (
-                  <div key={label} className="lib-info-card">
-                    <span>{label}</span>
-                    <strong>{val}</strong>
+              <div>
+                <div className="lib-info-grid">
+                  {[
+                    ["User ID", `#${user.userID}`],
+                    ["Name", user.name],
+                    ["Email", user.email],
+                    ["Phone", user.phone || "—"],
+                    ["Address", user.address || "—"],
+                    ["Role", user.role || "MEMBER"],
+                    ["Member Since", formatDate(user.createdAt)],
+                  ].map(([label, val]) => (
+                    <div key={label} className="lib-info-card">
+                      <span>{label}</span>
+                      <strong>{val}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="account-danger-zone">
+                  <div>
+                    <h4>Delete account</h4>
+                    <p>Your history stays with the library, but your personal account data is removed.</p>
                   </div>
-                ))}
+                  <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                    Delete account
+                  </button>
+                </div>
               </div>
             )}
 
@@ -849,6 +862,13 @@ export default function Dashboard({ user, onLogout }) {
           </div>
         </div>
       )}
+
+      <AccountDeletionDialog
+        user={user}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={onAccountDeleted}
+      />
 
       {/* ── MAIN CONTENT ── */}
       <main className="lib-main">

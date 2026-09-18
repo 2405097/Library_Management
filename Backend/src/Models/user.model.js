@@ -162,17 +162,69 @@ export const updateUser = async (
   }
 };
 
-/**
- * Delete a user by userID (Cascades to credentials table automatically)
- */
-export const deleteUser = async (userID) => {
-  const query = `
-    DELETE FROM users
-    WHERE "userID" = $1
-    RETURNING "userID";
-  `;
-  const { rows } = await pool.query(query, [userID]);
-  return rows[0];
+export const deleteUserAccount = async (userID, token) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      `SELECT "userID", role
+       FROM users
+       WHERE "userID" = $1
+       FOR UPDATE`,
+      [userID]
+    );
+    if (!userResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return { reason: 'NOT_FOUND' };
+    }
+
+    const activeBorrowResult = await client.query(
+      `SELECT "borrowID", status
+       FROM borrow_record
+       WHERE "userID" = $1
+         AND status IN ('PENDING', 'BORROWED', 'OVERDUE', 'LOST')
+       LIMIT 1
+       FOR UPDATE`,
+      [userID]
+    );
+    if (activeBorrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return {
+        reason: 'OPEN_BORROW',
+        status: activeBorrowResult.rows[0].status,
+      };
+    }
+
+    if (userResult.rows[0].role === 'ADMIN') {
+      const adminResult = await client.query(
+        `SELECT "userID"
+         FROM users
+         WHERE role = 'ADMIN'
+         FOR UPDATE`
+      );
+      if (adminResult.rows.length <= 1) {
+        await client.query('ROLLBACK');
+        return { reason: 'LAST_ADMIN' };
+      }
+    }
+
+    await client.query('DELETE FROM users WHERE "userID" = $1', [userID]);
+    if (token) {
+      await client.query(
+        'INSERT INTO revoked_token (token) VALUES ($1) ON CONFLICT DO NOTHING',
+        [token]
+      );
+    }
+
+    await client.query('COMMIT');
+    return { reason: 'DELETED' };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -657,7 +709,7 @@ export const getAdminBorrowRecords = async () => {
       br."delayFee",
       br."approvedAt",
       br."bookID",
-      u.name AS member_name,
+      COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name
     FROM borrow_record br
     LEFT JOIN users u ON u."userID" = br."userID"
@@ -677,7 +729,7 @@ export const getAdminOrders = async () => {
       o.quantity,
       o.status,
       o."approvedAt",
-      u.name AS member_name,
+      COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name,
       p."publisherName" AS publisher_name,
       STRING_AGG(DISTINCT a.name, ', ') AS author_names

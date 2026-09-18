@@ -42,13 +42,19 @@ function App() {
     localStorage.removeItem('library_token');
   };
 
+  const handleAccountDeleted = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('library_user');
+    localStorage.removeItem('library_token');
+  };
+
   return (
     <div className="app-container">
       {currentUser ? (
         currentUser.role === "ADMIN" ? (
-          <AdminDashboard user={currentUser} onLogout={handleLogout} />
+          <AdminDashboard user={currentUser} onLogout={handleLogout} onAccountDeleted={handleAccountDeleted} />
         ) : (
-          <Dashboard user={currentUser} onLogout={handleLogout} />
+          <Dashboard user={currentUser} onLogout={handleLogout} onAccountDeleted={handleAccountDeleted} />
         )
       ) : (
         <Login onLoginSuccess={handleLoginSuccess} />

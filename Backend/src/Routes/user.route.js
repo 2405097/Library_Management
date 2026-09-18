@@ -4,7 +4,7 @@ import {
   getUser,
   createNewUser,
   updateUserDetails,
-  deleteUserDetails,
+  deleteOwnAccount,
   loginUser,
   logoutUser,
   getBorrowRecordsByUser,
@@ -39,8 +39,8 @@ router.post('/logout', authenticate, logoutUser);
 // GET /api/users — list all users (ADMIN only)
 router.get('/', authenticate, authorize('ADMIN'), getUsers);
 
-// DELETE /api/users/:id — delete a user (ADMIN only)
-router.delete('/:id', authenticate, authorize('ADMIN'), deleteUserDetails);
+// DELETE /api/users/:id/account — delete the authenticated user's own account
+router.delete('/:id/account', authenticate, deleteOwnAccount);
 
 // ── Self-or-Admin routes (user can access own data; ADMIN can access any) ──
 // GET /api/users/:id — get user profile

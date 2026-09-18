@@ -6,10 +6,11 @@ import {
   findUserById, 
   findUserByEmail, 
   findUser,
+  findUserWithCredentialsById,
   updateLastLogin,
   getAllUsers,
   updateUser,
-  deleteUser,
+  deleteUserAccount,
   getBorrowRecordsByUserId,
   borrowBook,
   approveBorrow,
@@ -181,14 +182,43 @@ export const updateUserDetails = async (req, res) => {
   }
 };
 
-// Delete user
-export const deleteUserDetails = async (req, res) => {
+export const deleteOwnAccount = async (req, res) => {
   try {
-    const user = await deleteUser(req.params.id);
-    if (!user) {
+    const requestedID = Number(req.params.id);
+    if (!Number.isInteger(requestedID) || requestedID !== Number(req.user.userID)) {
+      return res.status(403).json({ message: 'You can only delete your own account' });
+    }
+
+    const { password } = req.body || {};
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ message: 'Your current password is required' });
+    }
+
+    const user = await findUserWithCredentialsById(requestedID);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isBcryptHash = typeof user.passHash === 'string' && /^\$2[aby]\$/.test(user.passHash);
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, user.passHash)
+      : password === user.passHash;
+    if (!passwordMatch) {
+      return res.status(401).json({ message: 'The password is incorrect' });
+    }
+
+    const result = await deleteUserAccount(requestedID, req.token);
+    if (result.reason === 'NOT_FOUND') {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.status(200).json({ message: 'User deleted successfully' });
+    if (result.reason === 'OPEN_BORROW') {
+      return res.status(409).json({
+        message: 'Return or resolve all borrowed books before deleting your account',
+      });
+    }
+    if (result.reason === 'LAST_ADMIN') {
+      return res.status(409).json({ message: 'The final administrator account cannot be deleted' });
+    }
+
+    return res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

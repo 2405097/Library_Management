@@ -26,6 +26,13 @@ export const authenticate = async (req, res, next) => {
     if (rows.length > 0) {
       return res.status(401).json({ message: 'Token has been revoked. Please log in again.' });
     }
+    const userResult = await pool.query(
+      'SELECT 1 FROM users WHERE "userID" = $1',
+      [payload.userID]
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ message: 'This account no longer exists. Please log in again.' });
+    }
     req.user = { userID: payload.userID, role: payload.role, email: payload.email };
     req.token = token;
     next();

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./Login.css";
+import AccountDeletionDialog from "./AccountDeletionDialog";
 
 const adminTabs = [
   { key: "library_info", label: "Library Info" },
@@ -8,7 +9,7 @@ const adminTabs = [
   { key: "ordered_book_info", label: "Ordered Book Info" },
 ];
 
-export default function AdminDashboard({ user, onLogout }) {
+export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [activeTab, setActiveTab] = useState("admin_info");
   const [summary, setSummary] = useState({
     total_users: 0,
@@ -25,6 +26,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [approvingOrderID, setApprovingOrderID] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
   const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -246,6 +248,15 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
               ))}
             </div>
+            <div className="account-danger-zone">
+              <div>
+                <h4>Delete account</h4>
+                <p>Your borrow and purchase history remains available to the library as “Deleted user”.</p>
+              </div>
+              <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                Delete account
+              </button>
+            </div>
           </div>
         )}
 
@@ -419,6 +430,12 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         )}
       </div>
+      <AccountDeletionDialog
+        user={user}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={onAccountDeleted}
+      />
     </div>
   );
 }

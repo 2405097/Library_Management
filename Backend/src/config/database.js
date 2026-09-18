@@ -113,6 +113,45 @@ export const initializeDatabase = async () => {
           UNIQUE ("userID", "bookID", "listType")
         );
       `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "userID" DROP NOT NULL;
+        ALTER TABLE "ORDER"
+        ALTER COLUMN "userID" DROP NOT NULL;
+      `);
+      await pool.query(`
+        DO $$
+        DECLARE
+          constraint_name TEXT;
+        BEGIN
+          FOR constraint_name IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'borrow_record'::regclass
+              AND confrelid = 'users'::regclass
+              AND contype = 'f'
+          LOOP
+            EXECUTE format('ALTER TABLE borrow_record DROP CONSTRAINT %I', constraint_name);
+          END LOOP;
+
+          FOR constraint_name IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = '"ORDER"'::regclass
+              AND confrelid = 'users'::regclass
+              AND contype = 'f'
+          LOOP
+            EXECUTE format('ALTER TABLE "ORDER" DROP CONSTRAINT %I', constraint_name);
+          END LOOP;
+
+          ALTER TABLE borrow_record
+            ADD CONSTRAINT borrow_record_userID_fkey
+            FOREIGN KEY ("userID") REFERENCES users("userID") ON DELETE SET NULL;
+          ALTER TABLE "ORDER"
+            ADD CONSTRAINT order_userID_fkey
+            FOREIGN KEY ("userID") REFERENCES users("userID") ON DELETE SET NULL;
+        END $$;
+      `);
       return;
     }
 
