@@ -58,6 +58,20 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
       await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "requestedAt" TIMESTAMP WITH TIME ZONE;
+      `);
+      await pool.query(`
+        UPDATE borrow_record
+        SET "requestedAt" = COALESCE("borrowDate", "approvedAt")
+        WHERE "requestedAt" IS NULL
+          AND ("borrowDate" IS NOT NULL OR "approvedAt" IS NOT NULL);
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "requestedAt" SET DEFAULT CURRENT_TIMESTAMP;
+      `);
+      await pool.query(`
         DO $$
         BEGIN
           IF EXISTS (

@@ -345,6 +345,7 @@ export const getBorrowRecordsByUserId = async (userID) => {
     SELECT
       br."borrowID",
       br."borrowDate",
+      br."requestedAt",
       br."dueDate",
       br."returnDate",
       br."delayFee",
@@ -404,7 +405,7 @@ export const borrowBook = async (userID, bookID) => {
     const borrowResult = await client.query(
       `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID")
        VALUES (NULL, NULL, 'PENDING', $1, $2)
-       RETURNING "borrowID", "borrowDate", "dueDate", "returnDate", status, "userID", "bookID", "approvedAt"`,
+       RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "approvedAt"`,
       [userID, bookID]
     );
     await client.query('COMMIT');
@@ -649,6 +650,7 @@ export const getAdminBorrowRecords = async () => {
     SELECT
       br."borrowID",
       br."borrowDate",
+      br."requestedAt",
       br."dueDate",
       br."returnDate",
       br.status,
@@ -660,7 +662,7 @@ export const getAdminBorrowRecords = async () => {
     FROM borrow_record br
     LEFT JOIN users u ON u."userID" = br."userID"
     LEFT JOIN book b ON b."bookID" = br."bookID"
-    ORDER BY br."borrowDate" DESC;
+    ORDER BY br."requestedAt" DESC NULLS LAST, br."borrowID" DESC;
   `;
   const { rows } = await pool.query(query);
   return rows;
