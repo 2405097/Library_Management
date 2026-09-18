@@ -704,3 +704,61 @@ export const approveOrder = async (purchaseNo) => {
   const { rows } = await pool.query(query, [purchaseNo]);
   return rows[0] || null;
 };
+
+export const getWishlistByUserId = async (userID) => {
+  const query = `
+    SELECT
+      w."wishlistID",
+      w."listType",
+      w."addedAt",
+      b."bookID",
+      b.title,
+      b."ISBN",
+      b.genre,
+      b.price,
+      b."availableCopies",
+      STRING_AGG(DISTINCT a.name, ', ') AS "authorName"
+    FROM wishlist w
+    JOIN book b ON b."bookID" = w."bookID"
+    LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+    LEFT JOIN author a ON a."authorID" = ba."authorID"
+    WHERE w."userID" = $1
+    GROUP BY w."wishlistID", w."listType", w."addedAt", b."bookID", b.title,
+             b."ISBN", b.genre, b.price, b."availableCopies"
+    ORDER BY w."listType", w."addedAt" DESC;
+  `;
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const addToWishlist = async (userID, bookID, listType) => {
+  const query = `
+    INSERT INTO wishlist ("userID", "bookID", "listType")
+    VALUES ($1, $2, $3)
+    ON CONFLICT ("userID", "bookID", "listType") DO NOTHING
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, listType]);
+  return rows[0] || null;
+};
+
+export const removeFromWishlist = async (userID, bookID, listType) => {
+  const query = `
+    DELETE FROM wishlist
+    WHERE "userID" = $1 AND "bookID" = $2 AND "listType" = $3
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, listType]);
+  return rows[0] || null;
+};
+
+export const moveInWishlist = async (userID, bookID, fromList, toList) => {
+  const query = `
+    UPDATE wishlist
+    SET "listType" = $4
+    WHERE "userID" = $1 AND "bookID" = $2 AND "listType" = $3
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, fromList, toList]);
+  return rows[0] || null;
+};

@@ -15,6 +15,10 @@ import {
   createOrderForUser,
   getLibraryReviewsByUser,
   createLibraryReviewForUser,
+  getWishlistForUser,
+  addToWishlistForUser,
+  removeFromWishlistForUser,
+  moveInWishlistForUser,
 } from '../Controllers/user.controller.js';
 import { authenticate, authorize, authorizeSelfOrAdmin } from '../middleware/auth.middleware.js';
 
@@ -66,6 +70,12 @@ router.get('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, getLibrar
 
 // POST /api/users/:id/library-reviews — submit a library review
 router.post('/:id/library-reviews', authenticate, authorizeSelfOrAdmin, createLibraryReviewForUser);
+
+// Wishlist routes
+router.get('/:id/wishlist', authenticate, authorizeSelfOrAdmin, getWishlistForUser);
+router.post('/:id/wishlist', authenticate, authorizeSelfOrAdmin, addToWishlistForUser);
+router.delete('/:id/wishlist/:bookID', authenticate, authorizeSelfOrAdmin, removeFromWishlistForUser);
+router.patch('/:id/wishlist/:bookID', authenticate, authorizeSelfOrAdmin, moveInWishlistForUser);
 
 export default router;
 

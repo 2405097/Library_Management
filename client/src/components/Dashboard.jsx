@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import "./Dashboard.css";
 import iconBookOpen from "../assets/book-open.svg";
+import iconBookmarkCheck from "../assets/bookmark-check.svg";
+import iconStar from "../assets/star.svg";
 import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
 
@@ -10,6 +12,12 @@ const SEARCH_OPTIONS = [
   { value: "genre", label: "Genre" },
   { value: "author", label: "Author" },
   { value: "publisher", label: "Publisher" },
+];
+
+const WISHLIST_LISTS = [
+  { key: "CURRENTLY_READING", label: "Currently Reading", icon: iconBookOpen },
+  { key: "WANT_TO_READ", label: "Want to Read", icon: iconBookmarkCheck },
+  { key: "FAVORITES", label: "Favorites", icon: iconStar },
 ];
 
 // Generate a pastel colour from a string (for book cover placeholders)
@@ -37,6 +45,7 @@ export default function Dashboard({ user, onLogout }) {
   const [bookReviews, setBookReviews] = useState([]);
   const [orderInfo, setOrderInfo] = useState([]);
   const [libraryReviewList, setLibraryReviewList] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
 
   // ── library review form ───────────────────────────────────────
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -60,11 +69,13 @@ export default function Dashboard({ user, onLogout }) {
       fetch(`${base}/book-reviews`, { headers: authHeaders }),
       fetch(`${base}/orders`, { headers: authHeaders }),
       fetch(`${base}/library-reviews`, { headers: authHeaders }),
-    ]).then(async ([bRes, rRes, oRes, lRes]) => {
+      fetch(`${base}/wishlist`, { headers: authHeaders }),
+    ]).then(async ([bRes, rRes, oRes, lRes, wRes]) => {
       setBorrowRecords(bRes.ok ? await bRes.json() : []);
       setBookReviews(rRes.ok ? await rRes.json() : []);
       setOrderInfo(oRes.ok ? await oRes.json() : []);
       setLibraryReviewList(lRes.ok ? await lRes.json() : []);
+      setWishlist(wRes.ok ? await wRes.json() : []);
     }).catch(() => {});
   }, [user]);
 
@@ -177,6 +188,61 @@ export default function Dashboard({ user, onLogout }) {
     if (!response.ok) throw new Error(data.message || 'Could not place this order.');
     setOrderInfo((current) => [{ ...data.order, book_name: book.title, author_name: book.authorName, publisher_name: book.publisher }, ...current]);
     window.alert('Order placed. It is waiting for admin confirmation.');
+  };
+
+  const handleAddToWishlist = async (book, listType) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/wishlist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify({ bookID: book.bookID, listType }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not add this book to your list.');
+    if (!data.alreadyExists && data.entry) {
+      setWishlist((current) => [
+        { ...book, ...data.entry, bookID: book.bookID },
+        ...current,
+      ]);
+    }
+  };
+
+  const handleRemoveFromWishlist = async (bookID, listType) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(
+      `/api/users/${user.userID}/wishlist/${bookID}?listType=${encodeURIComponent(listType)}`,
+      {
+        method: 'DELETE',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not remove this book from your list.');
+    setWishlist((current) => current.filter(
+      (entry) => !(String(entry.bookID) === String(bookID) && entry.listType === listType)
+    ));
+  };
+
+  const handleMoveInWishlist = async (bookID, fromList, toList) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/wishlist/${bookID}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify({ fromList, toList }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not move this book.');
+    setWishlist((current) => current.map((entry) => (
+      String(entry.bookID) === String(bookID) && entry.listType === fromList
+        ? { ...entry, ...data.entry, listType: toList }
+        : entry
+    )));
   };
 
   const handleSelectBook = (bookOrId) => {
@@ -354,6 +420,7 @@ export default function Dashboard({ user, onLogout }) {
     { key: "borrow_record", label: "Borrow Records" },
     { key: "book_review", label: "Book Reviews" },
     { key: "order_info", label: "Order Info" },
+    { key: "wishlist", label: "Wishlist" },
     { key: "library_review", label: "Library Reviews" },
   ];
 
@@ -630,6 +697,96 @@ export default function Dashboard({ user, onLogout }) {
               </div>
             )}
 
+            {/* Wishlist */}
+            {activeSection === "wishlist" && (
+              <div className="lib-wishlist">
+                <div className="lib-wishlist-intro">
+                  <span className="lib-wishlist-kicker">Your reading life</span>
+                  <p>Keep a quiet shelf for the books you are reading, saving, and loving.</p>
+                </div>
+                {WISHLIST_LISTS.map(({ key, label, icon }) => {
+                  const entries = wishlist.filter((entry) => entry.listType === key);
+                  return (
+                    <section key={key} className="lib-wishlist-section">
+                      <div className="lib-wishlist-section-heading">
+                        <div>
+                          <img className="lib-wishlist-section-icon" src={icon} alt="" aria-hidden="true" />
+                          <h3>{label}</h3>
+                        </div>
+                        <span className="lib-wishlist-count">{entries.length}</span>
+                      </div>
+                      {entries.length === 0 ? (
+                        <div className="lib-wishlist-empty">Nothing here yet.</div>
+                      ) : (
+                        <div className="lib-wishlist-grid">
+                          {entries.map((entry) => {
+                            const coverUrl = entry.ISBN
+                              ? `https://covers.openlibrary.org/b/isbn/${entry.ISBN}-M.jpg`
+                              : null;
+                            return (
+                              <article key={entry.wishlistID} className="lib-wishlist-card">
+                                <div
+                                  className="lib-wishlist-cover"
+                                  style={{ backgroundColor: colorFromString(entry.title) }}
+                                >
+                                  {coverUrl && (
+                                    <img
+                                      src={coverUrl}
+                                      alt=""
+                                      onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                                    />
+                                  )}
+                                  <span>{entry.title}</span>
+                                </div>
+                                <div className="lib-wishlist-card-body">
+                                  <h4 title={entry.title}>{entry.title}</h4>
+                                  <p>{entry.authorName || "Unknown author"}</p>
+                                  <span className="lib-wishlist-genre">{entry.genre || "General"}</span>
+                                  <div className="lib-wishlist-actions">
+                                    <button type="button" onClick={() => handleSelectBook(entry)}>View</button>
+                                    <select
+                                      value=""
+                                      aria-label={`Move ${entry.title} to another list`}
+                                      onChange={async (event) => {
+                                        if (!event.target.value) return;
+                                        try {
+                                          await handleMoveInWishlist(entry.bookID, key, event.target.value);
+                                        } catch (error) {
+                                          window.alert(error.message);
+                                        }
+                                      }}
+                                    >
+                                      <option value="">Move to…</option>
+                                      {WISHLIST_LISTS.filter((list) => list.key !== key).map((list) => (
+                                      <option key={list.key} value={list.key}>{list.label}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      className="lib-wishlist-remove"
+                                      onClick={async () => {
+                                        try {
+                                          await handleRemoveFromWishlist(entry.bookID, key);
+                                        } catch (error) {
+                                          window.alert(error.message);
+                                        }
+                                      }}
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Library Reviews */}
             {activeSection === "library_review" && (
               <div>
@@ -703,6 +860,8 @@ export default function Dashboard({ user, onLogout }) {
             onBorrow={handleBorrow}
             onOrder={handleOrder}
             onReview={handleReviewBook}
+            onAddToWishlist={handleAddToWishlist}
+            wishlist={wishlist}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">

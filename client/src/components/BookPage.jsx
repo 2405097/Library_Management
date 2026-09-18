@@ -1,8 +1,26 @@
 import { useEffect, useState, useMemo } from "react";
 import "./BookPage.css";
 import messageCircleIcon from "../assets/message-circle.svg";
+import iconBookOpen from "../assets/book-open.svg";
+import iconBookmarkCheck from "../assets/bookmark-check.svg";
+import iconStar from "../assets/star.svg";
 
-export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, onOrder, onReview }) {
+const WISHLIST_OPTIONS = [
+  { key: "CURRENTLY_READING", label: "Currently Reading", icon: iconBookOpen },
+  { key: "WANT_TO_READ", label: "Want to Read", icon: iconBookmarkCheck },
+  { key: "FAVORITES", label: "Favorites", icon: iconStar },
+];
+
+export default function BookPage({
+  book: initialBook,
+  bookId,
+  onBack,
+  onBorrow,
+  onOrder,
+  onReview,
+  onAddToWishlist,
+  wishlist = [],
+}) {
   const [book, setBook] = useState(initialBook || null);
   const [olData, setOlData] = useState(null);
   const [synopsis, setSynopsis] = useState("");
@@ -14,9 +32,14 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
   const [activeTab, setActiveTab] = useState("overview");
   const [borrowing, setBorrowing] = useState(false);
   const [ordering, setOrdering] = useState(false);
+  const [addingToList, setAddingToList] = useState(false);
+  const [showListPicker, setShowListPicker] = useState(false);
 
   const effectiveBookId = bookId || initialBook?.bookID;
   const cleanIsbn = book?.ISBN ? String(book.ISBN).replace(/[^0-9X]/gi, "") : "";
+  const bookListTypes = wishlist
+    .filter((entry) => String(entry.bookID) === String(book?.bookID))
+    .map((entry) => entry.listType);
 
   // ── 1. Fetch book from local backend if needed ───────────────────────────
   useEffect(() => {
@@ -240,6 +263,19 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
     }
   };
 
+  const handleAddToList = async (listType) => {
+    if (!onAddToWishlist || addingToList || bookListTypes.includes(listType)) return;
+    setAddingToList(true);
+    try {
+      await onAddToWishlist(book, listType);
+      setShowListPicker(false);
+    } catch (error) {
+      window.alert(error.message || "Could not add to list.");
+    } finally {
+      setAddingToList(false);
+    }
+  };
+
   return (
     <div className="book-page-wrapper">
       {/* ── BREADCRUMB & BACK NAV ── */}
@@ -331,23 +367,43 @@ export default function BookPage({ book: initialBook, bookId, onBack, onBorrow, 
               {ordering ? "Placing order..." : `Order book · $${Number(book.price || 0).toFixed(2)}`}
             </button>
 
-            {/* Add to List Button (Placeholder) */}
+            {/* Add to List */}
             <div className="bp-list-group">
               <button
                 type="button"
                 className="bp-btn-list"
-                onClick={() => alert(`Added "${book.title}" to your reading list!`)}
+                onClick={() => setShowListPicker((open) => !open)}
+                disabled={addingToList}
               >
-                Add to List
+                {bookListTypes.length > 0
+                  ? `✓ In ${bookListTypes.length} list${bookListTypes.length > 1 ? "s" : ""}`
+                  : addingToList ? "Adding…" : "Add to List"}
               </button>
               <button
                 type="button"
                 className="bp-btn-list-arrow"
                 title="Select list"
-                onClick={() => alert("Lists: Currently Reading, Want to Read, Favorites")}
+                onClick={() => setShowListPicker((open) => !open)}
               >
                 ▼
               </button>
+              {showListPicker && (
+                <div className="bp-list-picker">
+                  {WISHLIST_OPTIONS.map(({ key, label, icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`bp-list-picker-item ${bookListTypes.includes(key) ? "active" : ""}`}
+                      onClick={() => handleAddToList(key)}
+                      disabled={bookListTypes.includes(key)}
+                    >
+                      <img className="bp-list-picker-icon" src={icon} alt="" aria-hidden="true" />
+                      <span>{label}</span>
+                      {bookListTypes.includes(key) && " ✓"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Interactive Rating Stars */}

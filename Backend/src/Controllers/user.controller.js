@@ -27,8 +27,16 @@ import {
   getAdminOrders,
   createOrder,
   approveOrder,
+  getWishlistByUserId,
+  addToWishlist,
+  removeFromWishlist,
+  moveInWishlist,
   updateUserCredentials
 } from '../Models/user.model.js';
+
+const WISHLIST_LIST_TYPES = ['CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES'];
+
+const isValidWishlistListType = (listType) => WISHLIST_LIST_TYPES.includes(listType);
 
 // Login user — verifies bcrypt password, issues signed JWT
 export const loginUser = async (req, res) => {
@@ -253,6 +261,70 @@ export const createLibraryReviewForUser = async (req, res) => {
     const review = await createLibraryReview(req.params.id, numericRating, reportDetails.trim());
     res.status(201).json({ message: "Library review created successfully", review });
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getWishlistForUser = async (req, res) => {
+  try {
+    const wishlist = await getWishlistByUserId(req.params.id);
+    res.status(200).json(wishlist);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addToWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.body.bookID);
+    const { listType } = req.body;
+    if (!Number.isInteger(bookID) || bookID < 1 || !isValidWishlistListType(listType)) {
+      return res.status(400).json({ message: 'A valid book and wishlist list are required' });
+    }
+
+    const entry = await addToWishlist(req.params.id, bookID, listType);
+    res.status(entry ? 201 : 200).json({ entry, alreadyExists: !entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const removeFromWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    const { listType } = req.query;
+    if (!Number.isInteger(bookID) || bookID < 1 || !isValidWishlistListType(listType)) {
+      return res.status(400).json({ message: 'A valid book and wishlist list are required' });
+    }
+
+    const entry = await removeFromWishlist(req.params.id, bookID, listType);
+    if (!entry) return res.status(404).json({ message: 'Wishlist entry not found' });
+    res.status(200).json({ entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const moveInWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    const { fromList, toList } = req.body;
+    if (
+      !Number.isInteger(bookID) || bookID < 1
+      || !isValidWishlistListType(fromList)
+      || !isValidWishlistListType(toList)
+      || fromList === toList
+    ) {
+      return res.status(400).json({ message: 'Valid, different source and destination lists are required' });
+    }
+
+    const entry = await moveInWishlist(req.params.id, bookID, fromList, toList);
+    if (!entry) return res.status(404).json({ message: 'Wishlist entry not found' });
+    res.status(200).json({ entry });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'This book is already in the destination list' });
+    }
     res.status(500).json({ message: error.message });
   }
 };

@@ -97,6 +97,22 @@ export const initializeDatabase = async () => {
         ALTER TABLE borrow_record
         ALTER COLUMN "dueDate" DROP NOT NULL;
       `);
+      await pool.query(`
+        DO $$ BEGIN
+          CREATE TYPE wishlist_list_type AS ENUM ('CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS wishlist (
+          "wishlistID" SERIAL PRIMARY KEY,
+          "userID" INTEGER NOT NULL REFERENCES users("userID") ON DELETE CASCADE,
+          "bookID" INTEGER NOT NULL REFERENCES book("bookID") ON DELETE CASCADE,
+          "listType" wishlist_list_type NOT NULL DEFAULT 'WANT_TO_READ',
+          "addedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE ("userID", "bookID", "listType")
+        );
+      `);
       return;
     }
 
