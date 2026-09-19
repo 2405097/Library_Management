@@ -2,12 +2,15 @@ import express from 'express';
 import {
   getAdminDashboardSummary,
   getAdminBooksData,
+  getAdminBookReviewsData,
+  getAdminFeedbackData,
   getAdminBorrowData,
   getAdminOrderData,
   approveBorrowForAdmin,
   rejectBorrowForAdmin,
   returnBookForAdmin,
   approveOrderForAdmin,
+  approveNewUser,
 } from '../Controllers/user.controller.js';
 import { authenticate, authorize } from '../middleware/auth.middleware.js';
 
@@ -16,6 +19,9 @@ const router = express.Router();
 // All admin routes require a valid JWT AND ADMIN role
 router.get('/summary', authenticate, authorize('ADMIN'), getAdminDashboardSummary);
 router.get('/books', authenticate, authorize('ADMIN'), getAdminBooksData);
+router.get('/book-reviews', authenticate, authorize('ADMIN'), getAdminBookReviewsData);
+router.get('/feedback', authenticate, authorize('ADMIN'), getAdminFeedbackData);
+router.post('/signup-approvals/:id/approve', authenticate, authorize('ADMIN'), approveNewUser);
 router.get('/borrow-records', authenticate, authorize('ADMIN'), getAdminBorrowData);
 router.get('/orders', authenticate, authorize('ADMIN'), getAdminOrderData);
 router.post('/borrow-records/:borrowID/approve', authenticate, authorize('ADMIN'), approveBorrowForAdmin);

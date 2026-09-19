@@ -364,7 +364,7 @@ export default function BookPage({
             </div>
 
             <button type="button" className="bp-btn-list" onClick={handleOrder} disabled={ordering}>
-              {ordering ? "Placing order..." : `Order book · $${Number(book.price || 0).toFixed(2)}`}
+              {ordering ? "Placing order..." : `Order book · TK ${Number(book.price || 0).toFixed(0)}`}
             </button>
 
             {/* Add to List */}
@@ -444,7 +444,7 @@ export default function BookPage({
               {book.price != null && (
                 <div className="bp-sidebar-meta-item">
                   <span>Price:</span>
-                  <strong>${Number(book.price).toFixed(2)}</strong>
+                  <strong>TK {Number(book.price).toFixed(0)}</strong>
                 </div>
               )}
             </div>

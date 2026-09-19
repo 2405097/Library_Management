@@ -487,7 +487,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     { key: "book_review", label: "Book Reviews" },
     { key: "order_info", label: "Order Info" },
     { key: "wishlist", label: "Wishlist" },
-    { key: "library_review", label: "Library Reviews" },
+    { key: "library_review", label: "Feedback" },
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
@@ -657,7 +657,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{formatDate(r.borrowDate)}</td>
                           <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
-                          <td>${Number(r.delayFee || 0).toFixed(2)}</td>
+                          <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
                           <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status}</span></td>
                           <td>{hasReviewedBook(r.bookID) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(r.bookID, r.bookName || `Book #${r.bookID}`)}>Review</button>}</td>
                         </tr>
@@ -764,7 +764,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{o.author_name || "—"}</td>
                           <td>{o.publisher_name || "—"}</td>
                           <td>{formatDate(o.orderDate)}</td>
-                          <td>${Number(o.price || 0).toFixed(2)}</td>
+                          <td>TK {Number(o.price || 0).toFixed(0)}</td>
                           <td>{o.status === "PENDING" ? "Placed order not confirmed yet" : "Approved"}</td>
                           <td>{o.status !== "APPROVED" ? <span className="lib-review-pending">Available after approval</span> : hasReviewedBook(o.book_id) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(o.book_id, o.book_name)}>Review</button>}</td>
                         </tr>
@@ -865,7 +865,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
               </div>
             )}
 
-            {/* Library Reviews */}
+            {/* Feedback */}
             {activeSection === "library_review" && (
               <div>
                 <div className="lib-review-bar">
@@ -908,7 +908,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                   </form>
                 )}
                 {libraryReviewList.length === 0 ? (
-                  <div className="lib-empty">No library reviews yet.</div>
+                  <div className="lib-empty">No feedback yet.</div>
                 ) : (
                   <div className="lib-review-list">
                     {libraryReviewList.map((r) => (
@@ -1017,7 +1017,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                       <p className="lib-book-author">{book.authorName || "Unknown Author"}</p>
                       <p className="lib-book-genre">{book.genre || "—"}</p>
                       {book.price != null && (
-                        <p className="lib-book-price">${Number(book.price).toFixed(2)}</p>
+                        <p className="lib-book-price">TK {Number(book.price).toFixed(0)}</p>
                       )}
                     </div>
                   </div>

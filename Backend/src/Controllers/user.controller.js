@@ -24,6 +24,8 @@ import {
   searchBooksByField,
   getAdminSummary,
   getAdminBooks,
+  getAdminBookReviews,
+  getAdminFeedback,
   getAdminBorrowRecords,
   getAdminOrders,
   createOrder,
@@ -33,6 +35,7 @@ import {
   removeFromWishlist,
   moveInWishlist,
   updateUserCredentials
+  , approveUser
 } from '../Models/user.model.js';
 
 const WISHLIST_LIST_TYPES = ['CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES'];
@@ -62,6 +65,10 @@ export const loginUser = async (req, res) => {
       : password === user.passHash;
     if (!passwordMatch) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    if (user.isApproved === false) {
+      return res.status(403).json({ message: 'Your signup is awaiting admin approval.' });
     }
 
     if (!isBcryptHash) {
@@ -111,6 +118,16 @@ export const getUsers = async (req, res) => {
   try {
     const users = await getAllUsers();
     res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const approveNewUser = async (req, res) => {
+  try {
+    const user = await approveUser(Number(req.params.id));
+    if (!user) return res.status(409).json({ message: 'User is already approved or does not exist' });
+    res.status(200).json({ message: 'Signup approved successfully', user });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -372,6 +389,22 @@ export const getAdminBooksData = async (req, res) => {
   try {
     const books = await getAdminBooks();
     res.status(200).json(books);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminBookReviewsData = async (req, res) => {
+  try {
+    res.status(200).json(await getAdminBookReviews());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAdminFeedbackData = async (req, res) => {
+  try {
+    res.status(200).json(await getAdminFeedback());
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

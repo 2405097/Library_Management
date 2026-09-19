@@ -18,9 +18,9 @@ export const createUser = async ({
     await client.query("BEGIN");
 
     const query = `
-      INSERT INTO users (name, email, phone, address, role)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING "userID", name, email, phone, address, role, "createdAt";
+      INSERT INTO users (name, email, phone, address, role, "isApproved")
+      VALUES ($1, $2, $3, $4, $5, FALSE)
+      RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt";
     `;
     const values = [name, email, phone, address, role];
     const { rows } = await client.query(query, values);
@@ -54,7 +54,7 @@ export const createUser = async ({
  */
 export const findUserById = async (userID) => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
     FROM users
     WHERE "userID" = $1;
   `;
@@ -67,7 +67,7 @@ export const findUserById = async (userID) => {
  */
 export const findUserByEmail = async (email) => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
     FROM users
     WHERE email = $1;
   `;
@@ -80,7 +80,7 @@ export const findUserByEmail = async (email) => {
  */
 export const getAllUsers = async () => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
     FROM users
     ORDER BY "createdAt" DESC;
   `;
@@ -160,6 +160,17 @@ export const updateUser = async (
   } finally {
     client.release();
   }
+};
+
+export const approveUser = async (userID) => {
+  const query = `
+    UPDATE users
+    SET "isApproved" = TRUE, "approvedAt" = CURRENT_TIMESTAMP
+    WHERE "userID" = $1 AND "isApproved" = FALSE
+    RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt";
+  `;
+  const { rows } = await pool.query(query, [userID]);
+  return rows[0] || null;
 };
 
 export const deleteUserAccount = async (userID, token) => {
@@ -250,6 +261,8 @@ export const findUser = async (identifier) => {
       u.phone,
       u.address,
       u.role,
+      u."isApproved",
+      u."approvedAt",
       u."createdAt",
       c.username,
       c."passHash",
@@ -274,6 +287,8 @@ export const findUserWithCredentialsById = async (userID) => {
       u.phone,
       u.address,
       u.role,
+      u."isApproved",
+      u."approvedAt",
       u."createdAt",
       c.username,
       c."passHash",
@@ -536,7 +551,9 @@ export const returnBorrowedBook = async (borrowID) => {
     await client.query('BEGIN');
     const borrowResult = await client.query(
       `UPDATE borrow_record
-       SET "returnDate" = CURRENT_TIMESTAMP, status = 'RETURNED'
+      SET "returnDate" = CURRENT_TIMESTAMP,
+          status = 'RETURNED',
+          "delayFee" = GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20)
        WHERE "borrowID" = $1 AND status IN ('BORROWED', 'OVERDUE')
        RETURNING "borrowID", "bookID", "returnDate", status`,
       [borrowID]
@@ -697,6 +714,31 @@ export const getAdminBooks = async () => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     GROUP BY b."bookID", b.title, b.genre, b.price, b."availableCopies", b."totalCopies", p."publisherName"
     ORDER BY b."bookID" ASC;
+  `;
+  const { rows } = await pool.query(query);
+  return rows;
+};
+
+export const getAdminBookReviews = async () => {
+  const query = `
+    SELECT br."reviewID", br.rating, br.comment, br."createdAt",
+           b.title AS book_name, COALESCE(u.name, 'Deleted user') AS member_name
+    FROM book_review br
+    LEFT JOIN book b ON b."bookID" = br."bookID"
+    LEFT JOIN users u ON u."userID" = br."userID"
+    ORDER BY br."createdAt" DESC;
+  `;
+  const { rows } = await pool.query(query);
+  return rows;
+};
+
+export const getAdminFeedback = async () => {
+  const query = `
+    SELECT lr."libReviewID", lr.rating, lr."reportDetails", lr."createdAt",
+           COALESCE(u.name, 'Deleted user') AS member_name
+    FROM library_review lr
+    LEFT JOIN users u ON u."userID" = lr."userID"
+    ORDER BY lr."createdAt" DESC;
   `;
   const { rows } = await pool.query(query);
   return rows;

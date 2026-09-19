@@ -54,6 +54,15 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
       await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+        UPDATE users
+        SET "isApproved" = TRUE,
+            "approvedAt" = COALESCE("approvedAt", "createdAt")
+        WHERE "isApproved" IS DISTINCT FROM TRUE;
+      `);
+      await pool.query(`
         ALTER TABLE borrow_record
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
@@ -155,6 +164,29 @@ export const initializeDatabase = async () => {
       await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS book_review_one_per_member_book
         ON book_review ("userID", "bookID");
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS app_migrations (
+          name TEXT PRIMARY KEY,
+          "appliedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      const priceMigration = await pool.query(`
+        INSERT INTO app_migrations (name)
+        VALUES ('prices-stored-in-taka')
+        ON CONFLICT (name) DO NOTHING
+        RETURNING name;
+      `);
+      if (priceMigration.rowCount > 0) {
+        await pool.query(`UPDATE book SET price = price * 100 WHERE price IS NOT NULL`);
+      }
+      await pool.query(`
+        UPDATE borrow_record
+        SET "delayFee" = GREATEST(
+          0,
+          CEIL(EXTRACT(EPOCH FROM ("returnDate" - "borrowDate")) / 86400 - 7) * 20
+        )
+        WHERE "returnDate" IS NOT NULL;
       `);
       return;
     }

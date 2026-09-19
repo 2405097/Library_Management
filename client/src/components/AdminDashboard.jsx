@@ -3,14 +3,19 @@ import "./Login.css";
 import AccountDeletionDialog from "./AccountDeletionDialog";
 
 const adminTabs = [
+  { key: "member_info", label: "Member Info" },
+  { key: "admin_info", label: "Admin Info" },
+  { key: "signup_approvals", label: "Signup Approval" },
   { key: "library_info", label: "Library Info" },
   { key: "book_info", label: "Book Info" },
   { key: "borrow_book_info", label: "Borrow Book Info" },
   { key: "ordered_book_info", label: "Ordered Book Info" },
+  { key: "book_reviews", label: "Book Reviews" },
+  { key: "feedback", label: "Feedback" },
 ];
 
 export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
-  const [activeTab, setActiveTab] = useState("admin_info");
+  const [activeTab, setActiveTab] = useState("admin_profile");
   const [summary, setSummary] = useState({
     total_users: 0,
     total_books: 0,
@@ -22,6 +27,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [bookInfo, setBookInfo] = useState([]);
   const [borrowBookInfo, setBorrowBookInfo] = useState([]);
   const [orderedBookInfo, setOrderedBookInfo] = useState([]);
+  const [bookReviews, setBookReviews] = useState([]);
+  const [feedback, setFeedback] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [pendingSignups, setPendingSignups] = useState([]);
+  const [approvingSignupID, setApprovingSignupID] = useState(null);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
@@ -34,22 +45,33 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         const token = localStorage.getItem('library_token');
         const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
 
-        const [summaryRes, booksRes, borrowRes, ordersRes] = await Promise.all([
+        const [summaryRes, booksRes, borrowRes, ordersRes, reviewsRes, feedbackRes, usersRes] = await Promise.all([
           fetch('/api/admin/summary', { headers: authHeaders }),
           fetch('/api/admin/books', { headers: authHeaders }),
           fetch('/api/admin/borrow-records', { headers: authHeaders }),
           fetch('/api/admin/orders', { headers: authHeaders }),
+          fetch('/api/admin/book-reviews', { headers: authHeaders }),
+          fetch('/api/admin/feedback', { headers: authHeaders }),
+          fetch('/api/users', { headers: authHeaders }),
         ]);
 
         const summaryData = summaryRes.ok ? await summaryRes.json() : summary;
         const booksData = booksRes.ok ? await booksRes.json() : [];
         const borrowData = borrowRes.ok ? await borrowRes.json() : [];
         const orderData = ordersRes.ok ? await ordersRes.json() : [];
+        const reviewData = reviewsRes.ok ? await reviewsRes.json() : [];
+        const feedbackData = feedbackRes.ok ? await feedbackRes.json() : [];
+        const usersData = usersRes.ok ? await usersRes.json() : [];
 
         setSummary(summaryData);
         setBookInfo(booksData);
         setBorrowBookInfo(borrowData);
         setOrderedBookInfo(orderData);
+        setBookReviews(reviewData);
+        setFeedback(feedbackData);
+        setMembers(usersData.filter((account) => account.role === "MEMBER"));
+        setAdmins(usersData.filter((account) => account.role === "ADMIN"));
+        setPendingSignups(usersData.filter((account) => account.isApproved === false));
       } catch {
         setSummary({
           total_users: 0,
@@ -62,6 +84,9 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         setBookInfo([]);
         setBorrowBookInfo([]);
         setOrderedBookInfo([]);
+        setMembers([]);
+        setAdmins([]);
+        setPendingSignups([]);
       }
     };
 
@@ -181,6 +206,26 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
+  const approveSignup = async (userID) => {
+    setApprovingSignupID(userID);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/signup-approvals/${userID}/approve`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not approve signup.');
+      setPendingSignups((current) => current.filter((account) => String(account.userID) !== String(userID)));
+      setMembers((current) => current.map((account) => String(account.userID) === String(userID) ? data.user : account));
+      setAdmins((current) => current.map((account) => String(account.userID) === String(userID) ? data.user : account));
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setApprovingSignupID(null);
+    }
+  };
+
   const adminInfo = [
     { label: "Admin ID", value: user?.userID ?? "N/A" },
     { label: "Name", value: user?.name ?? "N/A" },
@@ -208,10 +253,10 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="dashboard-actions">
             <button
               type="button"
-              className={`admin-info-button ${activeTab === "admin_info" ? "active" : ""}`}
-              onClick={() => setActiveTab("admin_info")}
-              aria-label="Open admin information"
-              title="Admin information"
+              className={`admin-info-button ${activeTab === "admin_profile" ? "active" : ""}`}
+              onClick={() => setActiveTab("admin_profile")}
+              aria-label="Open my admin information"
+              title="My admin information"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="8" r="3.25" />
@@ -237,9 +282,35 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           ))}
         </div>
 
-        {activeTab === "admin_info" && (
+        {activeTab === "member_info" && (
           <div className="content-panel">
-            <h3>Admin Information</h3>
+            <h3>Member Information</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Member ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th>Joined</th></tr>
+                </thead>
+                <tbody>
+                  {members.map((member) => (
+                    <tr key={member.userID}>
+                      <td>{member.userID}</td>
+                      <td>{member.name}</td>
+                      <td>{member.email}</td>
+                      <td>{member.phone || "N/A"}</td>
+                      <td>{member.address || "N/A"}</td>
+                      <td>{member.createdAt ? new Date(member.createdAt).toLocaleDateString() : "N/A"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!members.length && <p>No members found.</p>}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "admin_profile" && (
+          <div className="content-panel">
+            <h3>My Admin Information</h3>
             <div className="info-grid">
               {adminInfo.map((item) => (
                 <div key={item.label} className="info-card">
@@ -248,14 +319,57 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                 </div>
               ))}
             </div>
-            <div className="account-danger-zone">
-              <div>
-                <h4>Delete account</h4>
-                <p>Your borrow and purchase history remains available to the library as “Deleted user”.</p>
-              </div>
+            <div className="account-danger-zone account-danger-button-only">
               <button type="button" onClick={() => setDeleteDialogOpen(true)}>
                 Delete account
               </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "admin_info" && (
+          <div className="content-panel">
+            <h3>All Admin Information</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th>Joined</th></tr>
+                </thead>
+                <tbody>
+                  {admins.map((admin) => (
+                    <tr key={admin.userID}>
+                      <td>{admin.userID}</td>
+                      <td>{admin.name}</td>
+                      <td>{admin.email}</td>
+                      <td>{admin.phone || "N/A"}</td>
+                      <td>{admin.address || "N/A"}</td>
+                      <td>{admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : "N/A"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!admins.length && <p>No admins found.</p>}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "signup_approvals" && (
+          <div className="content-panel">
+            <h3>Signup Approval</h3>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th><th>Signup Date</th><th>Action</th></tr></thead>
+                <tbody>
+                  {pendingSignups.map((account) => (
+                    <tr key={account.userID}>
+                      <td>{account.userID}</td><td>{account.name}</td><td>{account.email}</td><td>{account.role}</td>
+                      <td>{account.createdAt ? new Date(account.createdAt).toLocaleDateString() : "N/A"}</td>
+                      <td><button type="button" className="btn btn-primary small-btn" disabled={approvingSignupID === account.userID} onClick={() => approveSignup(account.userID)}>{approvingSignupID === account.userID ? "Approving..." : "Approve Signup"}</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!pendingSignups.length && <p>No pending signups.</p>}
             </div>
           </div>
         )}
@@ -300,7 +414,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{book.author_names || book.authorName || "N/A"}</td>
                       <td>{book.publishername || book.publisherName || "N/A"}</td>
                       <td>{book.availablecopies ?? book.availableCopies ?? 0}</td>
-                      <td>${Number(book.price || 0).toFixed(2)}</td>
+                      <td>TK {Number(book.price || 0).toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -343,7 +457,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                           {(item.status || "").toUpperCase() === "PENDING" ? "Pending Approval" : (item.status || "N/A")}
                         </span>
                       </td>
-                      <td>${Number(item.delayfee || item.delayFee || 0).toFixed(2)}</td>
+                      <td>TK {Number(item.delayfee || item.delayFee || 0).toFixed(0)}</td>
                       <td>
                         {(item.status || "").toUpperCase() === "PENDING" ? (
                           <div style={{ display: "flex", gap: "6px" }}>
@@ -413,7 +527,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.member_name || item.memberName || "N/A"}</td>
                       <td>{item.orderdate || item.orderDate || "N/A"}</td>
                       <td>{item.quantity || 1}</td>
-                      <td>${Number(item.price || 0).toFixed(2)}</td>
+                      <td>TK {Number(item.price || 0).toFixed(0)}</td>
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>
                       <td>
                         {(item.status || "PENDING") === "PENDING" ? (
@@ -426,6 +540,32 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "book_reviews" && (
+          <div className="content-panel">
+            <h3>Book Reviews</h3>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Book</th><th>Member</th><th>Rating</th><th>Review</th><th>Date</th></tr></thead>
+                <tbody>{bookReviews.map((review) => <tr key={review.reviewID}><td>{review.book_name || "N/A"}</td><td>{review.member_name || "N/A"}</td><td>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</td><td>{review.comment || "—"}</td><td>{review.createdAt || "—"}</td></tr>)}</tbody>
+              </table>
+              {!bookReviews.length && <p>No book reviews found.</p>}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "feedback" && (
+          <div className="content-panel">
+            <h3>Feedback</h3>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Member</th><th>Rating</th><th>Feedback</th><th>Date</th></tr></thead>
+                <tbody>{feedback.map((item) => <tr key={item.libReviewID}><td>{item.member_name || "N/A"}</td><td>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</td><td>{item.reportDetails || "—"}</td><td>{item.createdAt || "—"}</td></tr>)}</tbody>
+              </table>
+              {!feedback.length && <p>No feedback found.</p>}
             </div>
           </div>
         )}

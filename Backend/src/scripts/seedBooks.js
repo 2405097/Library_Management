@@ -151,7 +151,7 @@ async function seedGenre({ query, genre }) {
       }
 
       // Random price between $8.00 and $28.00
-      const price = Number((Math.random() * 20 + 8).toFixed(2));
+      const price = Math.round((Math.random() * 20 + 8) * 100);
       const pubYear = doc.year && Number.isInteger(Number(doc.year)) ? parseInt(doc.year, 10) : null;
 
       const bookRes = await client.query(
