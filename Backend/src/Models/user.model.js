@@ -162,17 +162,69 @@ export const updateUser = async (
   }
 };
 
-/**
- * Delete a user by userID (Cascades to credentials table automatically)
- */
-export const deleteUser = async (userID) => {
-  const query = `
-    DELETE FROM users
-    WHERE "userID" = $1
-    RETURNING "userID";
-  `;
-  const { rows } = await pool.query(query, [userID]);
-  return rows[0];
+export const deleteUserAccount = async (userID, token) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      `SELECT "userID", role
+       FROM users
+       WHERE "userID" = $1
+       FOR UPDATE`,
+      [userID]
+    );
+    if (!userResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return { reason: 'NOT_FOUND' };
+    }
+
+    const activeBorrowResult = await client.query(
+      `SELECT "borrowID", status
+       FROM borrow_record
+       WHERE "userID" = $1
+         AND status IN ('PENDING', 'BORROWED', 'OVERDUE', 'LOST')
+       LIMIT 1
+       FOR UPDATE`,
+      [userID]
+    );
+    if (activeBorrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return {
+        reason: 'OPEN_BORROW',
+        status: activeBorrowResult.rows[0].status,
+      };
+    }
+
+    if (userResult.rows[0].role === 'ADMIN') {
+      const adminResult = await client.query(
+        `SELECT "userID"
+         FROM users
+         WHERE role = 'ADMIN'
+         FOR UPDATE`
+      );
+      if (adminResult.rows.length <= 1) {
+        await client.query('ROLLBACK');
+        return { reason: 'LAST_ADMIN' };
+      }
+    }
+
+    await client.query('DELETE FROM users WHERE "userID" = $1', [userID]);
+    if (token) {
+      await client.query(
+        'INSERT INTO revoked_token (token) VALUES ($1) ON CONFLICT DO NOTHING',
+        [token]
+      );
+    }
+
+    await client.query('COMMIT');
+    return { reason: 'DELETED' };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -345,16 +397,18 @@ export const getBorrowRecordsByUserId = async (userID) => {
     SELECT
       br."borrowID",
       br."borrowDate",
+      br."requestedAt",
       br."dueDate",
       br."returnDate",
       br."delayFee",
       br.status,
+      br."approvedAt",
       br."bookID",
       b.title AS "bookName"
     FROM borrow_record br
     LEFT JOIN book b ON b."bookID" = br."bookID"
     WHERE br."userID" = $1
-    ORDER BY br."borrowDate" DESC;
+    ORDER BY br."borrowID" DESC;
   `;
   const { rows } = await pool.query(query, [userID]);
   return rows;
@@ -364,6 +418,30 @@ export const borrowBook = async (userID, bookID) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Serialize requests for the same user/book pair so concurrent clicks
+    // cannot create duplicate active or pending borrow records.
+    await client.query(
+      'SELECT pg_advisory_xact_lock($1::integer, $2::integer)',
+      [userID, bookID]
+    );
+
+    const activeBorrowResult = await client.query(
+      `SELECT "borrowID", status
+       FROM borrow_record
+       WHERE "userID" = $1
+         AND "bookID" = $2
+         AND status IN ('PENDING', 'BORROWED', 'OVERDUE')
+       LIMIT 1
+       FOR UPDATE`,
+      [userID, bookID]
+    );
+    if (activeBorrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      const isPending = activeBorrowResult.rows[0].status === 'PENDING';
+      return { alreadyBorrowed: true, alreadyPending: isPending };
+    }
+
     const bookResult = await client.query(
       `UPDATE book
        SET "availableCopies" = "availableCopies" - 1
@@ -378,9 +456,69 @@ export const borrowBook = async (userID, bookID) => {
 
     const borrowResult = await client.query(
       `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID")
-       VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '14 days', 'BORROWED', $1, $2)
-       RETURNING "borrowID", "borrowDate", "dueDate", "returnDate", status, "userID", "bookID"`,
+       VALUES (NULL, NULL, 'PENDING', $1, $2)
+       RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "approvedAt"`,
       [userID, bookID]
+    );
+    await client.query('COMMIT');
+    return borrowResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const approveBorrow = async (borrowID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const borrowResult = await client.query(
+      `UPDATE borrow_record
+       SET status = 'BORROWED',
+           "borrowDate" = CURRENT_TIMESTAMP,
+           "dueDate" = CURRENT_TIMESTAMP + INTERVAL '14 days',
+           "approvedAt" = CURRENT_TIMESTAMP
+       WHERE "borrowID" = $1 AND status = 'PENDING'
+       RETURNING "borrowID", "bookID", "borrowDate", "dueDate", "returnDate", "delayFee", "approvedAt", status`,
+      [borrowID]
+    );
+    if (!borrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    await client.query('COMMIT');
+    return borrowResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const rejectBorrow = async (borrowID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const borrowResult = await client.query(
+      `UPDATE borrow_record
+       SET status = 'REJECTED'
+       WHERE "borrowID" = $1 AND status = 'PENDING'
+       RETURNING "borrowID", "bookID", "borrowDate", "dueDate", "returnDate", "delayFee", status`,
+      [borrowID]
+    );
+    if (!borrowResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `UPDATE book
+       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + 1)
+       WHERE "bookID" = $1`,
+      [borrowResult.rows[0].bookID]
     );
     await client.query('COMMIT');
     return borrowResult.rows[0];
@@ -399,7 +537,7 @@ export const returnBorrowedBook = async (borrowID) => {
     const borrowResult = await client.query(
       `UPDATE borrow_record
        SET "returnDate" = CURRENT_TIMESTAMP, status = 'RETURNED'
-       WHERE "borrowID" = $1 AND status = 'BORROWED'
+       WHERE "borrowID" = $1 AND status IN ('BORROWED', 'OVERDUE')
        RETURNING "borrowID", "bookID", "returnDate", status`,
       [borrowID]
     );
@@ -447,7 +585,8 @@ export const createBookReview = async (userID, bookID, rating, comment) => {
     WITH eligible_book AS (
       SELECT 1
       FROM borrow_record
-      WHERE "userID" = $1 AND "bookID" = $2
+  WHERE "userID" = $1 AND "bookID" = $2
+    AND status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')
       UNION ALL
       SELECT 1
       FROM "ORDER"
@@ -533,6 +672,7 @@ export const getAdminSummary = async () => {
       (SELECT COUNT(*) FROM users) AS total_users,
       (SELECT COUNT(*) FROM book) AS total_books,
       (SELECT COUNT(*) FROM borrow_record WHERE status = 'BORROWED') AS active_borrow_records,
+      (SELECT COUNT(*) FROM borrow_record WHERE status = 'PENDING') AS pending_borrow_requests,
       (SELECT COUNT(*) FROM "ORDER") AS total_orders,
       (SELECT COUNT(*) FROM library_review) AS total_library_reviews;
   `;
@@ -567,16 +707,19 @@ export const getAdminBorrowRecords = async () => {
     SELECT
       br."borrowID",
       br."borrowDate",
+      br."requestedAt",
       br."dueDate",
       br."returnDate",
       br.status,
       br."delayFee",
-      u.name AS member_name,
+      br."approvedAt",
+      br."bookID",
+      COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name
     FROM borrow_record br
     LEFT JOIN users u ON u."userID" = br."userID"
     LEFT JOIN book b ON b."bookID" = br."bookID"
-    ORDER BY br."borrowDate" DESC;
+    ORDER BY br."requestedAt" DESC NULLS LAST, br."borrowID" DESC;
   `;
   const { rows } = await pool.query(query);
   return rows;
@@ -591,7 +734,7 @@ export const getAdminOrders = async () => {
       o.quantity,
       o.status,
       o."approvedAt",
-      u.name AS member_name,
+      COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name,
       p."publisherName" AS publisher_name,
       STRING_AGG(DISTINCT a.name, ', ') AS author_names
@@ -616,5 +759,63 @@ export const approveOrder = async (purchaseNo) => {
     RETURNING "purchaseNo", status, "approvedAt";
   `;
   const { rows } = await pool.query(query, [purchaseNo]);
+  return rows[0] || null;
+};
+
+export const getWishlistByUserId = async (userID) => {
+  const query = `
+    SELECT
+      w."wishlistID",
+      w."listType",
+      w."addedAt",
+      b."bookID",
+      b.title,
+      b."ISBN",
+      b.genre,
+      b.price,
+      b."availableCopies",
+      STRING_AGG(DISTINCT a.name, ', ') AS "authorName"
+    FROM wishlist w
+    JOIN book b ON b."bookID" = w."bookID"
+    LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+    LEFT JOIN author a ON a."authorID" = ba."authorID"
+    WHERE w."userID" = $1
+    GROUP BY w."wishlistID", w."listType", w."addedAt", b."bookID", b.title,
+             b."ISBN", b.genre, b.price, b."availableCopies"
+    ORDER BY w."listType", w."addedAt" DESC;
+  `;
+  const { rows } = await pool.query(query, [userID]);
+  return rows;
+};
+
+export const addToWishlist = async (userID, bookID, listType) => {
+  const query = `
+    INSERT INTO wishlist ("userID", "bookID", "listType")
+    VALUES ($1, $2, $3)
+    ON CONFLICT ("userID", "bookID", "listType") DO NOTHING
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, listType]);
+  return rows[0] || null;
+};
+
+export const removeFromWishlist = async (userID, bookID, listType) => {
+  const query = `
+    DELETE FROM wishlist
+    WHERE "userID" = $1 AND "bookID" = $2 AND "listType" = $3
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, listType]);
+  return rows[0] || null;
+};
+
+export const moveInWishlist = async (userID, bookID, fromList, toList) => {
+  const query = `
+    UPDATE wishlist
+    SET "listType" = $4
+    WHERE "userID" = $1 AND "bookID" = $2 AND "listType" = $3
+    RETURNING *;
+  `;
+  const { rows } = await pool.query(query, [userID, bookID, fromList, toList]);
   return rows[0] || null;
 };

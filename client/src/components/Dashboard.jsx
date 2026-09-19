@@ -1,8 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import "./Dashboard.css";
 import iconBookOpen from "../assets/book-open.svg";
+import iconBookmarkCheck from "../assets/bookmark-check.svg";
+import iconStar from "../assets/star.svg";
 import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
+import AccountDeletionDialog from "./AccountDeletionDialog";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -10,6 +13,12 @@ const SEARCH_OPTIONS = [
   { value: "genre", label: "Genre" },
   { value: "author", label: "Author" },
   { value: "publisher", label: "Publisher" },
+];
+
+const WISHLIST_LISTS = [
+  { key: "CURRENTLY_READING", label: "Currently Reading", icon: iconBookOpen },
+  { key: "WANT_TO_READ", label: "Want to Read", icon: iconBookmarkCheck },
+  { key: "FAVORITES", label: "Favorites", icon: iconStar },
 ];
 
 // Generate a pastel colour from a string (for book cover placeholders)
@@ -49,7 +58,7 @@ function BookReviewForm({ target, draft, setDraft, onSubmit, onCancel, message }
   );
 }
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   // ── search state ──────────────────────────────────────────────
   const [searchField, setSearchField] = useState("title");
   const [searchValue, setSearchValue] = useState("");
@@ -66,6 +75,7 @@ export default function Dashboard({ user, onLogout }) {
   const [bookReviews, setBookReviews] = useState([]);
   const [orderInfo, setOrderInfo] = useState([]);
   const [libraryReviewList, setLibraryReviewList] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
 
   // ── library review form ───────────────────────────────────────
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -73,8 +83,11 @@ export default function Dashboard({ user, onLogout }) {
   const [reviewMsg, setReviewMsg] = useState("");
   const [bookReviewTarget, setBookReviewTarget] = useState(null);
   const [bookReviewDraft, setBookReviewDraft] = useState({ rating: 5, comment: "" });
+  const [newBookReviewData, setNewBookReviewData] = useState({ bookID: "", rating: 5, comment: "" });
+  const [bookReviewMsg, setBookReviewMsg] = useState("");
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const drawerRef = useRef(null);
 
@@ -89,11 +102,13 @@ export default function Dashboard({ user, onLogout }) {
       fetch(`${base}/book-reviews`, { headers: authHeaders }),
       fetch(`${base}/orders`, { headers: authHeaders }),
       fetch(`${base}/library-reviews`, { headers: authHeaders }),
-    ]).then(async ([bRes, rRes, oRes, lRes]) => {
+      fetch(`${base}/wishlist`, { headers: authHeaders }),
+    ]).then(async ([bRes, rRes, oRes, lRes, wRes]) => {
       setBorrowRecords(bRes.ok ? await bRes.json() : []);
       setBookReviews(rRes.ok ? await rRes.json() : []);
       setOrderInfo(oRes.ok ? await oRes.json() : []);
       setLibraryReviewList(lRes.ok ? await lRes.json() : []);
+      setWishlist(wRes.ok ? await wRes.json() : []);
     }).catch(() => {});
   }, [user]);
 
@@ -165,6 +180,17 @@ export default function Dashboard({ user, onLogout }) {
   };
 
   const handleBorrow = async (book) => {
+    const activeRecord = borrowRecords.find(
+      (record) => String(record.bookID) === String(book.bookID)
+        && ["PENDING", "BORROWED", "OVERDUE"].includes(record.status)
+    );
+    if (activeRecord) {
+      if (activeRecord.status === "PENDING") {
+        throw new Error("You already have a pending borrow request for this book.");
+      }
+      throw new Error("You already have this book borrowed.");
+    }
+
     const token = localStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/borrow`, {
       method: 'POST',
@@ -177,8 +203,11 @@ export default function Dashboard({ user, onLogout }) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not borrow this book.');
     setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
-    setBorrowRecords((current) => [data.record, ...current]);
-    window.alert(`"${book.title}" borrowed successfully.`);
+    setBorrowRecords((current) => [
+      { ...data.record, bookName: book.title },
+      ...current,
+    ]);
+    window.alert(`Borrow request placed for "${book.title}". Waiting for admin approval.`);
   };
 
   const handleOrder = async (book) => {
@@ -192,6 +221,61 @@ export default function Dashboard({ user, onLogout }) {
     if (!response.ok) throw new Error(data.message || 'Could not place this order.');
     setOrderInfo((current) => [{ ...data.order, book_name: book.title, author_name: book.authorName, publisher_name: book.publisher }, ...current]);
     window.alert('Order placed. It is waiting for admin confirmation.');
+  };
+
+  const handleAddToWishlist = async (book, listType) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/wishlist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify({ bookID: book.bookID, listType }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not add this book to your list.');
+    if (!data.alreadyExists && data.entry) {
+      setWishlist((current) => [
+        { ...book, ...data.entry, bookID: book.bookID },
+        ...current,
+      ]);
+    }
+  };
+
+  const handleRemoveFromWishlist = async (bookID, listType) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(
+      `/api/users/${user.userID}/wishlist/${bookID}?listType=${encodeURIComponent(listType)}`,
+      {
+        method: 'DELETE',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not remove this book from your list.');
+    setWishlist((current) => current.filter(
+      (entry) => !(String(entry.bookID) === String(bookID) && entry.listType === listType)
+    ));
+  };
+
+  const handleMoveInWishlist = async (bookID, fromList, toList) => {
+    const token = localStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/wishlist/${bookID}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify({ fromList, toList }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not move this book.');
+    setWishlist((current) => current.map((entry) => (
+      String(entry.bookID) === String(bookID) && entry.listType === fromList
+        ? { ...entry, ...data.entry, listType: toList }
+        : entry
+    )));
   };
 
   const handleSelectBook = (bookOrId) => {
@@ -208,6 +292,26 @@ export default function Dashboard({ user, onLogout }) {
     if (window.location.pathname !== bookUrl) {
       window.history.pushState({ type: "book", id }, "", bookUrl);
     }
+  };
+
+  const handleReviewBook = (book) => {
+    const hasBorrowedBook = borrowRecords.some(
+      (record) => String(record.bookID) === String(book.bookID)
+        && ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status)
+    );
+
+    if (window.location.pathname.startsWith("/book/")) {
+      window.history.pushState({ type: "home" }, "", "/");
+    }
+    setSelectedBook(null);
+    setSelectedBookId(null);
+    setHasSearched(false);
+    setBookReviewMsg(hasBorrowedBook ? "" : "Borrow this book before submitting a review.");
+    setNewBookReviewData((current) => ({
+      ...current,
+      bookID: hasBorrowedBook ? String(book.bookID) : "",
+    }));
+    setActiveSection("book_review");
   };
 
   const handleBackFromBook = () => {
@@ -333,17 +437,71 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const handleBookReviewSubmit = async (e) => {
+    e.preventDefault();
+    const comment = newBookReviewData.comment.trim();
+
+    if (!newBookReviewData.bookID || !comment) {
+      setBookReviewMsg("Choose a borrowed book and write a review first.");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("library_token");
+      const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+        },
+        body: JSON.stringify({
+          bookID: Number(newBookReviewData.bookID),
+          rating: Number(newBookReviewData.rating),
+          comment,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Could not submit book review.");
+      }
+
+      const book = borrowRecords.find(
+        (record) => String(record.bookID) === String(newBookReviewData.bookID)
+      );
+      setBookReviews((current) => [
+        { ...data.review, book_name: book?.bookName || book?.bookID },
+        ...current,
+      ]);
+      setNewBookReviewData({ bookID: "", rating: 5, comment: "" });
+      setBookReviewMsg("Review submitted!");
+    } catch (error) {
+      setBookReviewMsg(error.message || "Could not submit book review.");
+    }
+  };
+
   // ── nav menu items ────────────────────────────────────────────
   const menuItems = [
     { key: "user_info", label: "User Information" },
     { key: "borrow_record", label: "Borrow Records" },
     { key: "book_review", label: "Book Reviews" },
     { key: "order_info", label: "Order Info" },
+    { key: "wishlist", label: "Wishlist" },
     { key: "library_review", label: "Library Reviews" },
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
   const hasReviewedBook = (bookID) => bookReviews.some((review) => String(review.book_id) === String(bookID));
+  const borrowedBookOptions = Array.from(
+    new Map(
+      borrowRecords
+        .filter((record) => ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status))
+        .map((record) => [String(record.bookID), {
+          bookID: record.bookID,
+          bookName: record.bookName || `Book #${record.bookID}`,
+        }])
+    ).values()
+  );
 
   return (
     <div className="lib-root">
@@ -448,21 +606,32 @@ export default function Dashboard({ user, onLogout }) {
 
             {/* User Info */}
             {activeSection === "user_info" && (
-              <div className="lib-info-grid">
-                {[
-                  ["User ID", `#${user.userID}`],
-                  ["Name", user.name],
-                  ["Email", user.email],
-                  ["Phone", user.phone || "—"],
-                  ["Address", user.address || "—"],
-                  ["Role", user.role || "MEMBER"],
-                  ["Member Since", formatDate(user.createdAt)],
-                ].map(([label, val]) => (
-                  <div key={label} className="lib-info-card">
-                    <span>{label}</span>
-                    <strong>{val}</strong>
+              <div>
+                <div className="lib-info-grid">
+                  {[
+                    ["User ID", `#${user.userID}`],
+                    ["Name", user.name],
+                    ["Email", user.email],
+                    ["Phone", user.phone || "—"],
+                    ["Address", user.address || "—"],
+                    ["Role", user.role || "MEMBER"],
+                    ["Member Since", formatDate(user.createdAt)],
+                  ].map(([label, val]) => (
+                    <div key={label} className="lib-info-card">
+                      <span>{label}</span>
+                      <strong>{val}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="account-danger-zone">
+                  <div>
+                    <h4>Delete account</h4>
+                    <p>Your history stays with the library, but your personal account data is removed.</p>
                   </div>
-                ))}
+                  <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                    Delete account
+                  </button>
+                </div>
               </div>
             )}
 
@@ -486,7 +655,7 @@ export default function Dashboard({ user, onLogout }) {
                           <td>{r.borrowID}</td>
                           <td>{r.bookName || r.bookID}</td>
                           <td>{formatDate(r.borrowDate)}</td>
-                          <td>{formatDate(r.dueDate)}</td>
+                          <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
                           <td>${Number(r.delayFee || 0).toFixed(2)}</td>
                           <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status}</span></td>
@@ -501,25 +670,77 @@ export default function Dashboard({ user, onLogout }) {
 
             {/* Book Reviews */}
             {activeSection === "book_review" && (
-              <div className="lib-table-wrap">
+              <div>
+                <div className="lib-review-bar">
+                  <span className="lib-review-msg" aria-live="polite">{bookReviewMsg}</span>
+                </div>
+                <form className="lib-review-form" onSubmit={handleBookReviewSubmit}>
+                  <div className="form-group">
+                    <label htmlFor="book-review-book">Book</label>
+                    <select
+                      id="book-review-book"
+                      value={newBookReviewData.bookID}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, bookID: e.target.value }))}
+                      className="form-control"
+                      required
+                    >
+                      <option value="">Choose a borrowed book</option>
+                      {borrowedBookOptions.map((book) => (
+                        <option key={book.bookID} value={book.bookID}>{book.bookName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="book-review-rating">Rating</label>
+                    <select
+                      id="book-review-rating"
+                      value={newBookReviewData.rating}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, rating: e.target.value }))}
+                      className="form-control"
+                    >
+                      <option value={5}>5 — Excellent</option>
+                      <option value={4}>4 — Good</option>
+                      <option value={3}>3 — Average</option>
+                      <option value={2}>2 — Poor</option>
+                      <option value={1}>1 — Very poor</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="book-review-comment">Your Review</label>
+                    <textarea
+                      id="book-review-comment"
+                      rows={4}
+                      value={newBookReviewData.comment}
+                      onChange={(e) => setNewBookReviewData((current) => ({ ...current, comment: e.target.value }))}
+                      className="form-control"
+                      placeholder="What stayed with you?"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={!borrowedBookOptions.length}>
+                    Submit Book Review
+                  </button>
+                </form>
                 {bookReviews.length === 0 ? (
                   <div className="lib-empty">No book reviews yet.</div>
                 ) : (
-                  <table className="lib-table">
-                    <thead>
-                      <tr><th>Book</th><th>Rating</th><th>Comment</th><th>Date</th></tr>
-                    </thead>
-                    <tbody>
-                      {bookReviews.map((r) => (
-                        <tr key={r.reviewID}>
-                          <td>{r.book_name || r.book_id}</td>
-                          <td>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</td>
-                          <td>{r.comment || "—"}</td>
-                          <td>{formatDate(r.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="lib-table-wrap">
+                    <table className="lib-table">
+                      <thead>
+                        <tr><th>Book</th><th>Rating</th><th>Comment</th><th>Date</th></tr>
+                      </thead>
+                      <tbody>
+                        {bookReviews.map((r) => (
+                          <tr key={r.reviewID}>
+                            <td>{r.book_name || r.book_id}</td>
+                            <td>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</td>
+                            <td>{r.comment || "—"}</td>
+                            <td>{formatDate(r.createdAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -551,6 +772,96 @@ export default function Dashboard({ user, onLogout }) {
                     </tbody>
                   </table>
                 )}
+              </div>
+            )}
+
+            {/* Wishlist */}
+            {activeSection === "wishlist" && (
+              <div className="lib-wishlist">
+                <div className="lib-wishlist-intro">
+                  <span className="lib-wishlist-kicker">Your reading life</span>
+                  <p>Keep a quiet shelf for the books you are reading, saving, and loving.</p>
+                </div>
+                {WISHLIST_LISTS.map(({ key, label, icon }) => {
+                  const entries = wishlist.filter((entry) => entry.listType === key);
+                  return (
+                    <section key={key} className="lib-wishlist-section">
+                      <div className="lib-wishlist-section-heading">
+                        <div>
+                          <img className="lib-wishlist-section-icon" src={icon} alt="" aria-hidden="true" />
+                          <h3>{label}</h3>
+                        </div>
+                        <span className="lib-wishlist-count">{entries.length}</span>
+                      </div>
+                      {entries.length === 0 ? (
+                        <div className="lib-wishlist-empty">Nothing here yet.</div>
+                      ) : (
+                        <div className="lib-wishlist-grid">
+                          {entries.map((entry) => {
+                            const coverUrl = entry.ISBN
+                              ? `https://covers.openlibrary.org/b/isbn/${entry.ISBN}-M.jpg`
+                              : null;
+                            return (
+                              <article key={entry.wishlistID} className="lib-wishlist-card">
+                                <div
+                                  className="lib-wishlist-cover"
+                                  style={{ backgroundColor: colorFromString(entry.title) }}
+                                >
+                                  {coverUrl && (
+                                    <img
+                                      src={coverUrl}
+                                      alt=""
+                                      onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                                    />
+                                  )}
+                                  <span>{entry.title}</span>
+                                </div>
+                                <div className="lib-wishlist-card-body">
+                                  <h4 title={entry.title}>{entry.title}</h4>
+                                  <p>{entry.authorName || "Unknown author"}</p>
+                                  <span className="lib-wishlist-genre">{entry.genre || "General"}</span>
+                                  <div className="lib-wishlist-actions">
+                                    <button type="button" onClick={() => handleSelectBook(entry)}>View</button>
+                                    <select
+                                      value=""
+                                      aria-label={`Move ${entry.title} to another list`}
+                                      onChange={async (event) => {
+                                        if (!event.target.value) return;
+                                        try {
+                                          await handleMoveInWishlist(entry.bookID, key, event.target.value);
+                                        } catch (error) {
+                                          window.alert(error.message);
+                                        }
+                                      }}
+                                    >
+                                      <option value="">Move to…</option>
+                                      {WISHLIST_LISTS.filter((list) => list.key !== key).map((list) => (
+                                      <option key={list.key} value={list.key}>{list.label}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      className="lib-wishlist-remove"
+                                      onClick={async () => {
+                                        try {
+                                          await handleRemoveFromWishlist(entry.bookID, key);
+                                        } catch (error) {
+                                          window.alert(error.message);
+                                        }
+                                      }}
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             )}
 
@@ -617,6 +928,13 @@ export default function Dashboard({ user, onLogout }) {
         </div>
       )}
 
+      <AccountDeletionDialog
+        user={user}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={onAccountDeleted}
+      />
+
       {/* ── MAIN CONTENT ── */}
       <main className="lib-main">
         {selectedBookId ? (
@@ -626,6 +944,9 @@ export default function Dashboard({ user, onLogout }) {
             onBack={handleBackFromBook}
             onBorrow={handleBorrow}
             onOrder={handleOrder}
+            onReview={handleReviewBook}
+            onAddToWishlist={handleAddToWishlist}
+            wishlist={wishlist}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">

@@ -4,6 +4,8 @@ import {
   getAdminBooksData,
   getAdminBorrowData,
   getAdminOrderData,
+  approveBorrowForAdmin,
+  rejectBorrowForAdmin,
   returnBookForAdmin,
   approveOrderForAdmin,
 } from '../Controllers/user.controller.js';
@@ -16,6 +18,8 @@ router.get('/summary', authenticate, authorize('ADMIN'), getAdminDashboardSummar
 router.get('/books', authenticate, authorize('ADMIN'), getAdminBooksData);
 router.get('/borrow-records', authenticate, authorize('ADMIN'), getAdminBorrowData);
 router.get('/orders', authenticate, authorize('ADMIN'), getAdminOrderData);
+router.post('/borrow-records/:borrowID/approve', authenticate, authorize('ADMIN'), approveBorrowForAdmin);
+router.post('/borrow-records/:borrowID/reject', authenticate, authorize('ADMIN'), rejectBorrowForAdmin);
 router.post('/borrow-records/:borrowID/return', authenticate, authorize('ADMIN'), returnBookForAdmin);
 router.post('/orders/:purchaseNo/approve', authenticate, authorize('ADMIN'), approveOrderForAdmin);
 

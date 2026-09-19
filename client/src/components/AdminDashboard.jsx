@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./Login.css";
+import AccountDeletionDialog from "./AccountDeletionDialog";
 
 const adminTabs = [
   { key: "library_info", label: "Library Info" },
@@ -8,12 +9,13 @@ const adminTabs = [
   { key: "ordered_book_info", label: "Ordered Book Info" },
 ];
 
-export default function AdminDashboard({ user, onLogout }) {
+export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [activeTab, setActiveTab] = useState("admin_info");
   const [summary, setSummary] = useState({
     total_users: 0,
     total_books: 0,
     active_borrow_records: 0,
+    pending_borrow_requests: 0,
     total_orders: 0,
     total_library_reviews: 0,
   });
@@ -22,6 +24,9 @@ export default function AdminDashboard({ user, onLogout }) {
   const [orderedBookInfo, setOrderedBookInfo] = useState([]);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
+  const [approvingBorrowID, setApprovingBorrowID] = useState(null);
+  const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -50,6 +55,7 @@ export default function AdminDashboard({ user, onLogout }) {
           total_users: 0,
           total_books: 0,
           active_borrow_records: 0,
+          pending_borrow_requests: 0,
           total_orders: 0,
           total_library_reviews: 0,
         });
@@ -90,6 +96,69 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  const approveBorrow = async (borrowID) => {
+    setApprovingBorrowID(borrowID);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/borrow-records/${borrowID}/approve`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not approve borrow request.');
+      setBorrowBookInfo((current) => current.map((item) =>
+        String(item.borrowid || item.borrowID) === String(borrowID)
+          ? {
+              ...item,
+              status: data.record.status,
+              borrowdate: data.record.borrowDate,
+              borrowDate: data.record.borrowDate,
+              duedate: data.record.dueDate,
+              dueDate: data.record.dueDate,
+              approvedAt: data.record.approvedAt,
+            }
+          : item
+      ));
+      setSummary((current) => ({
+        ...current,
+        active_borrow_records: Number(current.active_borrow_records || 0) + 1,
+      }));
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setApprovingBorrowID(null);
+    }
+  };
+
+  const rejectBorrow = async (borrowID) => {
+    setRejectingBorrowID(borrowID);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/borrow-records/${borrowID}/reject`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not reject borrow request.');
+      setBorrowBookInfo((current) => current.map((item) =>
+        String(item.borrowid || item.borrowID) === String(borrowID)
+          ? { ...item, status: data.record.status }
+          : item
+      ));
+      if (data.record?.bookID) {
+        setBookInfo((current) => current.map((item) =>
+          String(item.bookid || item.bookID) === String(data.record.bookID)
+            ? { ...item, availablecopies: Number(item.availablecopies ?? item.availableCopies ?? 0) + 1 }
+            : item
+        ));
+      }
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setRejectingBorrowID(null);
+    }
+  };
+
   const approveOrder = async (purchaseNo) => {
     setApprovingOrderID(purchaseNo);
     try {
@@ -124,6 +193,8 @@ export default function AdminDashboard({ user, onLogout }) {
     { label: "Branch", value: "Main Campus" },
     { label: "Books Available", value: String(summary.total_books || 0) },
     { label: "Members", value: String(summary.total_users || 0) },
+    { label: "Active Borrows", value: String(summary.active_borrow_records || 0) },
+    { label: "Pending Borrow Requests", value: String(summary.pending_borrow_requests || 0) },
   ];
 
   return (
@@ -176,6 +247,15 @@ export default function AdminDashboard({ user, onLogout }) {
                   <strong>{item.value}</strong>
                 </div>
               ))}
+            </div>
+            <div className="account-danger-zone">
+              <div>
+                <h4>Delete account</h4>
+                <p>Your borrow and purchase history remains available to the library as “Deleted user”.</p>
+              </div>
+              <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                Delete account
+              </button>
             </div>
           </div>
         )}
@@ -252,17 +332,53 @@ export default function AdminDashboard({ user, onLogout }) {
                       <td>{item.borrowid ?? item.borrowID}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
-                      <td>{item.duedate || item.dueDate || "N/A"}</td>
+                      <td>
+                        {(item.status || "").toUpperCase() === "PENDING"
+                          ? "Upon approval"
+                          : (item.duedate || item.dueDate || "N/A")}
+                      </td>
                       <td>{item.returndate || item.returnDate || "Not returned"}</td>
-                      <td>{item.status || "N/A"}</td>
+                      <td>
+                        <span className={`status-chip status-${(item.status || "").toLowerCase()}`}>
+                          {(item.status || "").toUpperCase() === "PENDING" ? "Pending Approval" : (item.status || "N/A")}
+                        </span>
+                      </td>
                       <td>${Number(item.delayfee || item.delayFee || 0).toFixed(2)}</td>
                       <td>
-                        {(item.status || "").toUpperCase() === "BORROWED" ? (
-                          <button type="button" className="btn btn-primary small-btn" disabled={returningBorrowID === (item.borrowid || item.borrowID)} onClick={() => processReturn(item.borrowid || item.borrowID)}>
+                        {(item.status || "").toUpperCase() === "PENDING" ? (
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary small-btn"
+                              disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
+                              onClick={() => approveBorrow(item.borrowid || item.borrowID)}
+                            >
+                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : "Approve Borrow"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary small-btn btn-danger-outline"
+                              disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
+                              onClick={() => rejectBorrow(item.borrowid || item.borrowID)}
+                            >
+                              {rejectingBorrowID === (item.borrowid || item.borrowID) ? "Rejecting..." : "Reject"}
+                            </button>
+                          </div>
+                        ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary small-btn"
+                            disabled={returningBorrowID === (item.borrowid || item.borrowID)}
+                            onClick={() => processReturn(item.borrowid || item.borrowID)}
+                          >
                             {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : "Process Return"}
                           </button>
                         ) : (
-                          <span>{item.returndate || item.returnDate || "Returned"}</span>
+                          <span>
+                            {(item.status || "").toUpperCase() === "REJECTED"
+                              ? "Rejected"
+                              : (item.returndate || item.returnDate || "Returned")}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -314,6 +430,12 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         )}
       </div>
+      <AccountDeletionDialog
+        user={user}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={onAccountDeleted}
+      />
     </div>
   );
 }

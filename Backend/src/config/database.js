@@ -54,6 +54,105 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
       await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "requestedAt" TIMESTAMP WITH TIME ZONE;
+      `);
+      await pool.query(`
+        UPDATE borrow_record
+        SET "requestedAt" = COALESCE("borrowDate", "approvedAt")
+        WHERE "requestedAt" IS NULL
+          AND ("borrowDate" IS NOT NULL OR "approvedAt" IS NOT NULL);
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "requestedAt" SET DEFAULT CURRENT_TIMESTAMP;
+      `);
+      await pool.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'borrow_record'::regclass AND conname = 'borrow_record_status_check'
+          ) THEN
+            ALTER TABLE borrow_record DROP CONSTRAINT borrow_record_status_check;
+          END IF;
+          ALTER TABLE borrow_record
+          ADD CONSTRAINT borrow_record_status_check
+          CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'OVERDUE', 'LOST', 'REJECTED'));
+        END $$;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN status SET DEFAULT 'PENDING';
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "borrowDate" DROP NOT NULL;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "dueDate" DROP NOT NULL;
+      `);
+      await pool.query(`
+        DO $$ BEGIN
+          CREATE TYPE wishlist_list_type AS ENUM ('CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS wishlist (
+          "wishlistID" SERIAL PRIMARY KEY,
+          "userID" INTEGER NOT NULL REFERENCES users("userID") ON DELETE CASCADE,
+          "bookID" INTEGER NOT NULL REFERENCES book("bookID") ON DELETE CASCADE,
+          "listType" wishlist_list_type NOT NULL DEFAULT 'WANT_TO_READ',
+          "addedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE ("userID", "bookID", "listType")
+        );
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ALTER COLUMN "userID" DROP NOT NULL;
+        ALTER TABLE "ORDER"
+        ALTER COLUMN "userID" DROP NOT NULL;
+      `);
+      await pool.query(`
+        DO $$
+        DECLARE
+          constraint_name TEXT;
+        BEGIN
+          FOR constraint_name IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'borrow_record'::regclass
+              AND confrelid = 'users'::regclass
+              AND contype = 'f'
+          LOOP
+            EXECUTE format('ALTER TABLE borrow_record DROP CONSTRAINT %I', constraint_name);
+          END LOOP;
+
+          FOR constraint_name IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = '"ORDER"'::regclass
+              AND confrelid = 'users'::regclass
+              AND contype = 'f'
+          LOOP
+            EXECUTE format('ALTER TABLE "ORDER" DROP CONSTRAINT %I', constraint_name);
+          END LOOP;
+
+          ALTER TABLE borrow_record
+            ADD CONSTRAINT borrow_record_userID_fkey
+            FOREIGN KEY ("userID") REFERENCES users("userID") ON DELETE SET NULL;
+          ALTER TABLE "ORDER"
+            ADD CONSTRAINT order_userID_fkey
+            FOREIGN KEY ("userID") REFERENCES users("userID") ON DELETE SET NULL;
+        END $$;
+      `);
+      await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS book_review_one_per_member_book
         ON book_review ("userID", "bookID");
       `);

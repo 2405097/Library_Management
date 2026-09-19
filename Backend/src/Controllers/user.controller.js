@@ -6,12 +6,15 @@ import {
   findUserById, 
   findUserByEmail, 
   findUser,
+  findUserWithCredentialsById,
   updateLastLogin,
   getAllUsers,
   updateUser,
-  deleteUser,
+  deleteUserAccount,
   getBorrowRecordsByUserId,
   borrowBook,
+  approveBorrow,
+  rejectBorrow,
   returnBorrowedBook,
   getBookReviewsByUserId,
   createBookReview,
@@ -25,8 +28,16 @@ import {
   getAdminOrders,
   createOrder,
   approveOrder,
+  getWishlistByUserId,
+  addToWishlist,
+  removeFromWishlist,
+  moveInWishlist,
   updateUserCredentials
 } from '../Models/user.model.js';
+
+const WISHLIST_LIST_TYPES = ['CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES'];
+
+const isValidWishlistListType = (listType) => WISHLIST_LIST_TYPES.includes(listType);
 
 // Login user — verifies bcrypt password, issues signed JWT
 export const loginUser = async (req, res) => {
@@ -171,14 +182,43 @@ export const updateUserDetails = async (req, res) => {
   }
 };
 
-// Delete user
-export const deleteUserDetails = async (req, res) => {
+export const deleteOwnAccount = async (req, res) => {
   try {
-    const user = await deleteUser(req.params.id);
-    if (!user) {
+    const requestedID = Number(req.params.id);
+    if (!Number.isInteger(requestedID) || requestedID !== Number(req.user.userID)) {
+      return res.status(403).json({ message: 'You can only delete your own account' });
+    }
+
+    const { password } = req.body || {};
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ message: 'Your current password is required' });
+    }
+
+    const user = await findUserWithCredentialsById(requestedID);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isBcryptHash = typeof user.passHash === 'string' && /^\$2[aby]\$/.test(user.passHash);
+    const passwordMatch = isBcryptHash
+      ? await bcrypt.compare(password, user.passHash)
+      : password === user.passHash;
+    if (!passwordMatch) {
+      return res.status(401).json({ message: 'The password is incorrect' });
+    }
+
+    const result = await deleteUserAccount(requestedID, req.token);
+    if (result.reason === 'NOT_FOUND') {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.status(200).json({ message: 'User deleted successfully' });
+    if (result.reason === 'OPEN_BORROW') {
+      return res.status(409).json({
+        message: 'Return or resolve all borrowed books before deleting your account',
+      });
+    }
+    if (result.reason === 'LAST_ADMIN') {
+      return res.status(409).json({ message: 'The final administrator account cannot be deleted' });
+    }
+
+    return res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -251,6 +291,70 @@ export const createLibraryReviewForUser = async (req, res) => {
     const review = await createLibraryReview(req.params.id, numericRating, reportDetails.trim());
     res.status(201).json({ message: "Library review created successfully", review });
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getWishlistForUser = async (req, res) => {
+  try {
+    const wishlist = await getWishlistByUserId(req.params.id);
+    res.status(200).json(wishlist);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addToWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.body.bookID);
+    const { listType } = req.body;
+    if (!Number.isInteger(bookID) || bookID < 1 || !isValidWishlistListType(listType)) {
+      return res.status(400).json({ message: 'A valid book and wishlist list are required' });
+    }
+
+    const entry = await addToWishlist(req.params.id, bookID, listType);
+    res.status(entry ? 201 : 200).json({ entry, alreadyExists: !entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const removeFromWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    const { listType } = req.query;
+    if (!Number.isInteger(bookID) || bookID < 1 || !isValidWishlistListType(listType)) {
+      return res.status(400).json({ message: 'A valid book and wishlist list are required' });
+    }
+
+    const entry = await removeFromWishlist(req.params.id, bookID, listType);
+    if (!entry) return res.status(404).json({ message: 'Wishlist entry not found' });
+    res.status(200).json({ entry });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const moveInWishlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    const { fromList, toList } = req.body;
+    if (
+      !Number.isInteger(bookID) || bookID < 1
+      || !isValidWishlistListType(fromList)
+      || !isValidWishlistListType(toList)
+      || fromList === toList
+    ) {
+      return res.status(400).json({ message: 'Valid, different source and destination lists are required' });
+    }
+
+    const entry = await moveInWishlist(req.params.id, bookID, fromList, toList);
+    if (!entry) return res.status(404).json({ message: 'Wishlist entry not found' });
+    res.status(200).json({ entry });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'This book is already in the destination list' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -330,10 +434,40 @@ export const borrowBookForUser = async (req, res) => {
       return res.status(400).json({ message: 'A valid book ID is required' });
     }
     const record = await borrowBook(req.params.id, bookID);
+    if (record?.alreadyPending) {
+      return res.status(409).json({ message: 'You already have a pending borrow request for this book' });
+    }
+    if (record?.alreadyBorrowed) {
+      return res.status(409).json({ message: 'You already have this book borrowed' });
+    }
     if (!record) {
       return res.status(409).json({ message: 'This book is currently unavailable' });
     }
-    res.status(201).json({ message: 'Book borrowed successfully', record });
+    res.status(201).json({ message: 'Borrow request placed and awaiting admin approval', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const approveBorrowForAdmin = async (req, res) => {
+  try {
+    const record = await approveBorrow(Number(req.params.borrowID));
+    if (!record) {
+      return res.status(409).json({ message: 'This borrow request is already processed or does not exist' });
+    }
+    res.status(200).json({ message: 'Borrow request approved successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const rejectBorrowForAdmin = async (req, res) => {
+  try {
+    const record = await rejectBorrow(Number(req.params.borrowID));
+    if (!record) {
+      return res.status(409).json({ message: 'This borrow request is already processed or does not exist' });
+    }
+    res.status(200).json({ message: 'Borrow request rejected successfully', record });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
