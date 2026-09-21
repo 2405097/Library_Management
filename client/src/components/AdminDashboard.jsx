@@ -14,6 +14,23 @@ const adminTabs = [
   { key: "feedback", label: "Feedback" },
 ];
 
+const formatDate = (val, fallback = "—") => {
+  if (!val) return fallback;
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? fallback : val.toISOString().split("T")[0];
+  }
+  const str = String(val).trim();
+  if (!str) return fallback;
+  if (str.includes("T")) {
+    return str.split("T")[0];
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? str : parsed.toISOString().split("T")[0];
+};
+
 export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [activeTab, setActiveTab] = useState("admin_profile");
   const [summary, setSummary] = useState({
@@ -35,6 +52,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [approvingSignupID, setApprovingSignupID] = useState(null);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
+  const [rejectingOrderID, setRejectingOrderID] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
   const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -206,6 +224,35 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
+  const rejectOrder = async (purchaseNo) => {
+    setRejectingOrderID(purchaseNo);
+    try {
+      const token = localStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/orders/${purchaseNo}/reject`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not reject order.');
+      setOrderedBookInfo((current) => current.map((item) =>
+        String(item.purchaseno || item.purchaseNo) === String(purchaseNo)
+          ? { ...item, status: data.order.status }
+          : item
+      ));
+      if (data.order?.bookID) {
+        setBookInfo((current) => current.map((item) =>
+          String(item.bookid || item.bookID) === String(data.order.bookID)
+            ? { ...item, availablecopies: Number(item.availablecopies ?? item.availableCopies ?? 0) + Number(data.order.quantity || 1) }
+            : item
+        ));
+      }
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setRejectingOrderID(null);
+    }
+  };
+
   const approveSignup = async (userID) => {
     setApprovingSignupID(userID);
     try {
@@ -286,7 +333,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Member Information</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-members">
                 <thead>
                   <tr><th>Member ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th>Joined</th></tr>
                 </thead>
@@ -298,7 +345,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{member.email}</td>
                       <td>{member.phone || "N/A"}</td>
                       <td>{member.address || "N/A"}</td>
-                      <td>{member.createdAt ? new Date(member.createdAt).toLocaleDateString() : "N/A"}</td>
+                      <td>{formatDate(member.createdAt, "N/A")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -331,7 +378,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>All Admin Information</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-admins">
                 <thead>
                   <tr><th>Admin ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Address</th><th>Joined</th></tr>
                 </thead>
@@ -343,7 +390,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{admin.email}</td>
                       <td>{admin.phone || "N/A"}</td>
                       <td>{admin.address || "N/A"}</td>
-                      <td>{admin.createdAt ? new Date(admin.createdAt).toLocaleDateString() : "N/A"}</td>
+                      <td>{formatDate(admin.createdAt, "N/A")}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -357,13 +404,13 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Signup Approval</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-signups">
                 <thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th><th>Signup Date</th><th>Action</th></tr></thead>
                 <tbody>
                   {pendingSignups.map((account) => (
                     <tr key={account.userID}>
                       <td>{account.userID}</td><td>{account.name}</td><td>{account.email}</td><td>{account.role}</td>
-                      <td>{account.createdAt ? new Date(account.createdAt).toLocaleDateString() : "N/A"}</td>
+                      <td>{formatDate(account.createdAt, "N/A")}</td>
                       <td><button type="button" className="btn btn-primary small-btn" disabled={approvingSignupID === account.userID} onClick={() => approveSignup(account.userID)}>{approvingSignupID === account.userID ? "Approving..." : "Approve Signup"}</button></td>
                     </tr>
                   ))}
@@ -392,7 +439,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Book Info</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-books">
                 <thead>
                   <tr>
                     <th>Book ID</th>
@@ -400,7 +447,6 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Genre</th>
                     <th>Author</th>
                     <th>Publisher</th>
-                    <th>Status / Action</th>
                     <th>Available Copies</th>
                     <th>Price</th>
                   </tr>
@@ -414,7 +460,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{book.author_names || book.authorName || "N/A"}</td>
                       <td>{book.publishername || book.publisherName || "N/A"}</td>
                       <td>{book.availablecopies ?? book.availableCopies ?? 0}</td>
-                      <td>TK {Number(book.price || 0).toFixed(0)}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>TK {Number(book.price || 0).toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -427,7 +473,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Borrow Book Info</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-borrows">
                 <thead>
                   <tr>
                     <th>Borrow ID</th>
@@ -448,30 +494,33 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.member_name || item.memberName || "N/A"}</td>
                       <td>
                         {(item.status || "").toUpperCase() === "PENDING"
-                          ? "Upon approval"
-                          : (item.duedate || item.dueDate || "N/A")}
+                           ? "Upon approval"
+                          : formatDate(item.duedate || item.dueDate, "N/A")}
                       </td>
-                      <td>{item.returndate || item.returnDate || "Not returned"}</td>
+                      <td>{item.returndate || item.returnDate ? formatDate(item.returndate || item.returnDate) : "Not returned"}</td>
                       <td>
                         <span className={`status-chip status-${(item.status || "").toLowerCase()}`}>
-                          {(item.status || "").toUpperCase() === "PENDING" ? "Pending Approval" : (item.status || "N/A")}
+                          {(item.status || "").toUpperCase() === "PENDING" ? (
+                            <>PENDING<br />APPROVAL</>
+                          ) : (item.status || "N/A")}
                         </span>
                       </td>
                       <td>TK {Number(item.delayfee || item.delayFee || 0).toFixed(0)}</td>
                       <td>
                         {(item.status || "").toUpperCase() === "PENDING" ? (
-                          <div style={{ display: "flex", gap: "6px" }}>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                             <button
                               type="button"
-                              className="btn btn-primary small-btn"
+                              className="btn btn-primary small-btn borrow-action-btn"
+                              style={{ lineHeight: 1.2, textAlign: "center" }}
                               disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
                               onClick={() => approveBorrow(item.borrowid || item.borrowID)}
                             >
-                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : "Approve Borrow"}
+                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : <>Approve<br />Borrow</>}
                             </button>
                             <button
                               type="button"
-                              className="btn btn-secondary small-btn btn-danger-outline"
+                              className="btn btn-secondary small-btn btn-danger-outline borrow-action-btn"
                               disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
                               onClick={() => rejectBorrow(item.borrowid || item.borrowID)}
                             >
@@ -481,7 +530,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                         ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) ? (
                           <button
                             type="button"
-                            className="btn btn-primary small-btn"
+                            className="btn btn-primary small-btn borrow-action-btn"
                             disabled={returningBorrowID === (item.borrowid || item.borrowID)}
                             onClick={() => processReturn(item.borrowid || item.borrowID)}
                           >
@@ -491,7 +540,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                           <span>
                             {(item.status || "").toUpperCase() === "REJECTED"
                               ? "Rejected"
-                              : (item.returndate || item.returnDate || "Returned")}
+                              : (item.returndate || item.returnDate ? formatDate(item.returndate || item.returnDate) : "Returned")}
                           </span>
                         )}
                       </td>
@@ -507,7 +556,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Ordered Book Info</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-orders">
                 <thead>
                   <tr>
                     <th>Purchase No</th>
@@ -517,6 +566,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Quantity</th>
                     <th>Price</th>
                     <th>Publisher</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -525,16 +575,37 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.purchaseno ?? item.purchaseNo}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
-                      <td>{item.orderdate || item.orderDate || "N/A"}</td>
+                      <td>{formatDate(item.orderdate || item.orderDate, "N/A")}</td>
                       <td>{item.quantity || 1}</td>
                       <td>TK {Number(item.price || 0).toFixed(0)}</td>
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>
                       <td>
-                        {(item.status || "PENDING") === "PENDING" ? (
-                          <button type="button" className="btn btn-primary small-btn" disabled={approvingOrderID === (item.purchaseno || item.purchaseNo)} onClick={() => approveOrder(item.purchaseno || item.purchaseNo)}>
-                            {approvingOrderID === (item.purchaseno || item.purchaseNo) ? "Approving..." : "Approve Order"}
-                          </button>
-                        ) : <span>Approved</span>}
+                        {(item.status || "PENDING").toUpperCase() === "PENDING" ? (
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary small-btn order-action-btn"
+                              style={{ lineHeight: 1.2, textAlign: "center" }}
+                              disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
+                              onClick={() => approveOrder(item.purchaseno || item.purchaseNo)}
+                            >
+                              {approvingOrderID === (item.purchaseno || item.purchaseNo) ? "Approving..." : <>Approve<br />Order</>}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary small-btn btn-danger-outline order-action-btn"
+                              style={{ lineHeight: 1.2, textAlign: "center" }}
+                              disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
+                              onClick={() => rejectOrder(item.purchaseno || item.purchaseNo)}
+                            >
+                              {rejectingOrderID === (item.purchaseno || item.purchaseNo) ? "Rejecting..." : <>Reject<br />Order</>}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className={`status-chip status-${(item.status || "").toLowerCase()}`}>
+                            {(item.status || "").toUpperCase() === "REJECTED" ? "Rejected" : "Approved"}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -548,9 +619,9 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Book Reviews</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-reviews">
                 <thead><tr><th>Book</th><th>Member</th><th>Rating</th><th>Review</th><th>Date</th></tr></thead>
-                <tbody>{bookReviews.map((review) => <tr key={review.reviewID}><td>{review.book_name || "N/A"}</td><td>{review.member_name || "N/A"}</td><td>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</td><td>{review.comment || "—"}</td><td>{review.createdAt || "—"}</td></tr>)}</tbody>
+                <tbody>{bookReviews.map((review) => <tr key={review.reviewID}><td>{review.book_name || "N/A"}</td><td>{review.member_name || "N/A"}</td><td>{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</td><td>{review.comment || "—"}</td><td>{formatDate(review.createdAt, "—")}</td></tr>)}</tbody>
               </table>
               {!bookReviews.length && <p>No book reviews found.</p>}
             </div>
@@ -561,9 +632,9 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Feedback</h3>
             <div className="table-wrap">
-              <table>
+              <table className="admin-table admin-table-feedback">
                 <thead><tr><th>Member</th><th>Rating</th><th>Feedback</th><th>Date</th></tr></thead>
-                <tbody>{feedback.map((item) => <tr key={item.libReviewID}><td>{item.member_name || "N/A"}</td><td>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</td><td>{item.reportDetails || "—"}</td><td>{item.createdAt || "—"}</td></tr>)}</tbody>
+                <tbody>{feedback.map((item) => <tr key={item.libReviewID}><td>{item.member_name || "N/A"}</td><td>{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</td><td>{item.reportDetails || "—"}</td><td>{formatDate(item.createdAt, "—")}</td></tr>)}</tbody>
               </table>
               {!feedback.length && <p>No feedback found.</p>}
             </div>

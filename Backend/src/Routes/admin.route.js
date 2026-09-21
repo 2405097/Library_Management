@@ -10,6 +10,7 @@ import {
   rejectBorrowForAdmin,
   returnBookForAdmin,
   approveOrderForAdmin,
+  rejectOrderForAdmin,
   approveNewUser,
 } from '../Controllers/user.controller.js';
 import { authenticate, authorize } from '../middleware/auth.middleware.js';
@@ -28,5 +29,6 @@ router.post('/borrow-records/:borrowID/approve', authenticate, authorize('ADMIN'
 router.post('/borrow-records/:borrowID/reject', authenticate, authorize('ADMIN'), rejectBorrowForAdmin);
 router.post('/borrow-records/:borrowID/return', authenticate, authorize('ADMIN'), returnBookForAdmin);
 router.post('/orders/:purchaseNo/approve', authenticate, authorize('ADMIN'), approveOrderForAdmin);
+router.post('/orders/:purchaseNo/reject', authenticate, authorize('ADMIN'), rejectOrderForAdmin);
 
 export default router;

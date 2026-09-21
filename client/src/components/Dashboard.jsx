@@ -203,6 +203,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not borrow this book.');
     setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
+    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableCopies: Math.max(0, Number(b.availableCopies || 0) - 1) } : b));
     setBorrowRecords((current) => [
       { ...data.record, bookName: book.title },
       ...current,
@@ -219,6 +220,8 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not place this order.');
+    setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
+    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableCopies: Math.max(0, Number(b.availableCopies || 0) - 1) } : b));
     setOrderInfo((current) => [{ ...data.order, book_name: book.title, author_name: book.authorName, publisher_name: book.publisher }, ...current]);
     window.alert('Order placed. It is waiting for admin confirmation.');
   };
@@ -638,7 +641,6 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             {/* Borrow Records */}
             {activeSection === "borrow_record" && (
               <div className="lib-table-wrap">
-                {bookReviewTarget && <BookReviewForm target={bookReviewTarget} draft={bookReviewDraft} setDraft={setBookReviewDraft} onSubmit={submitBookReview} onCancel={() => setBookReviewTarget(null)} message={reviewMsg} />}
                 {borrowRecords.length === 0 ? (
                   <div className="lib-empty">No borrow records found.</div>
                 ) : (
@@ -646,7 +648,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                     <thead>
                       <tr>
                         <th>ID</th><th>Book</th><th>Borrow Date</th>
-                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th>Status</th><th>Review</th>
+                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -658,8 +660,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
                           <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
-                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status}</span></td>
-                          <td>{hasReviewedBook(r.bookID) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(r.bookID, r.bookName || `Book #${r.bookID}`)}>Review</button>}</td>
+                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status === "PENDING" ? "Pending Admin Approval" : r.status}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -765,8 +766,12 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{o.publisher_name || "—"}</td>
                           <td>{formatDate(o.orderDate)}</td>
                           <td>TK {Number(o.price || 0).toFixed(0)}</td>
-                          <td>{o.status === "PENDING" ? "Placed order not confirmed yet" : "Approved"}</td>
-                          <td>{o.status !== "APPROVED" ? <span className="lib-review-pending">Available after approval</span> : hasReviewedBook(o.book_id) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(o.book_id, o.book_name)}>Review</button>}</td>
+                          <td>
+                            <span className={`status-chip status-${(o.status || "pending").toLowerCase()}`}>
+                              {o.status === "PENDING" ? "Pending Admin Approval" : o.status === "REJECTED" ? "Rejected" : "Approved"}
+                            </span>
+                          </td>
+                          <td>{o.status === "REJECTED" ? <span className="lib-review-pending">Order rejected</span> : o.status !== "APPROVED" ? <span className="lib-review-pending">Available after approval</span> : hasReviewedBook(o.book_id) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(o.book_id, o.book_name)}>Review</button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -947,6 +952,8 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             onReview={handleReviewBook}
             onAddToWishlist={handleAddToWishlist}
             wishlist={wishlist}
+            borrowRecords={borrowRecords}
+            orders={orderInfo}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">

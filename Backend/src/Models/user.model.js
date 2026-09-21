@@ -645,15 +645,37 @@ export const getOrdersByUserId = async (userID) => {
 };
 
 export const createOrder = async (userID, bookID, quantity = 1) => {
-  const query = `
-    INSERT INTO "ORDER" ("orderDate", price, quantity, status, "userID", "bookID")
-    SELECT CURRENT_DATE, b.price * $3, $3, 'PENDING', $1, b."bookID"
-    FROM book b
-    WHERE b."bookID" = $2
-    RETURNING "purchaseNo", "orderDate", price, quantity, status, "approvedAt", "bookID" AS book_id;
-  `;
-  const { rows } = await pool.query(query, [userID, bookID, quantity]);
-  return rows[0] || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const bookResult = await client.query(
+      `UPDATE book
+       SET "availableCopies" = "availableCopies" - $2
+       WHERE "bookID" = $1 AND "availableCopies" >= $2
+       RETURNING "bookID", price`,
+      [bookID, quantity]
+    );
+    if (!bookResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const totalPrice = Number(bookResult.rows[0].price || 0) * Number(quantity);
+    const orderResult = await client.query(
+      `INSERT INTO "ORDER" ("orderDate", price, quantity, status, "userID", "bookID")
+       VALUES (CURRENT_DATE, $3, $4, 'PENDING', $1, $2)
+       RETURNING "purchaseNo", "orderDate", price, quantity, status, "approvedAt", "bookID" AS book_id`,
+      [userID, bookID, totalPrice, quantity]
+    );
+
+    await client.query('COMMIT');
+    return orderResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const getLibraryReviewsByUserId = async (userID) => {
@@ -802,6 +824,39 @@ export const approveOrder = async (purchaseNo) => {
   `;
   const { rows } = await pool.query(query, [purchaseNo]);
   return rows[0] || null;
+};
+
+export const rejectOrder = async (purchaseNo) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const orderResult = await client.query(
+      `UPDATE "ORDER"
+       SET status = 'REJECTED'
+       WHERE "purchaseNo" = $1 AND status = 'PENDING'
+       RETURNING "purchaseNo", "bookID", quantity, status`,
+      [purchaseNo]
+    );
+    if (!orderResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `UPDATE book
+       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + $2::INT)
+       WHERE "bookID" = $1`,
+      [orderResult.rows[0].bookID, Number(orderResult.rows[0].quantity || 1)]
+    );
+
+    await client.query('COMMIT');
+    return orderResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const getWishlistByUserId = async (userID) => {

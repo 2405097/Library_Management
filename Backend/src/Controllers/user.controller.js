@@ -30,6 +30,7 @@ import {
   getAdminOrders,
   createOrder,
   approveOrder,
+  rejectOrder,
   getWishlistByUserId,
   addToWishlist,
   removeFromWishlist,
@@ -526,7 +527,7 @@ export const createOrderForUser = async (req, res) => {
       return res.status(400).json({ message: 'A valid book and quantity are required' });
     }
     const order = await createOrder(req.params.id, bookID, quantity);
-    if (!order) return res.status(404).json({ message: 'Book not found' });
+    if (!order) return res.status(400).json({ message: 'This book is out of stock or does not exist.' });
     res.status(201).json({ message: 'Order placed and awaiting admin confirmation', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -538,6 +539,16 @@ export const approveOrderForAdmin = async (req, res) => {
     const order = await approveOrder(Number(req.params.purchaseNo));
     if (!order) return res.status(409).json({ message: 'This order is already approved or does not exist' });
     res.status(200).json({ message: 'Order approved successfully', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const rejectOrderForAdmin = async (req, res) => {
+  try {
+    const order = await rejectOrder(Number(req.params.purchaseNo));
+    if (!order) return res.status(409).json({ message: 'This order cannot be rejected or does not exist' });
+    res.status(200).json({ message: 'Order rejected successfully', order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

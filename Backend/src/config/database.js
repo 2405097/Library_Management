@@ -54,6 +54,23 @@ export const initializeDatabase = async () => {
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
       `);
       await pool.query(`
+        DO $$
+        DECLARE
+          constraint_record RECORD;
+        BEGIN
+          FOR constraint_record IN
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = '"ORDER"'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%status%'
+          LOOP
+            EXECUTE format('ALTER TABLE "ORDER" DROP CONSTRAINT %I', constraint_record.conname);
+          END LOOP;
+          ALTER TABLE "ORDER"
+          ADD CONSTRAINT order_status_check
+          CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'));
+        END $$;
+      `);
+      await pool.query(`
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT TRUE,
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;

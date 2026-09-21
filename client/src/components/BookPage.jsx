@@ -20,6 +20,8 @@ export default function BookPage({
   onReview,
   onAddToWishlist,
   wishlist = [],
+  borrowRecords = [],
+  orders = [],
 }) {
   const [book, setBook] = useState(initialBook || null);
   const [olData, setOlData] = useState(null);
@@ -35,11 +37,27 @@ export default function BookPage({
   const [addingToList, setAddingToList] = useState(false);
   const [showListPicker, setShowListPicker] = useState(false);
 
+  useEffect(() => {
+    if (initialBook) {
+      setBook(initialBook);
+    }
+  }, [initialBook]);
+
   const effectiveBookId = bookId || initialBook?.bookID;
   const cleanIsbn = book?.ISBN ? String(book.ISBN).replace(/[^0-9X]/gi, "") : "";
   const bookListTypes = wishlist
     .filter((entry) => String(entry.bookID) === String(book?.bookID))
     .map((entry) => entry.listType);
+
+  const pendingBorrow = (borrowRecords || []).find(
+    (r) => String(r.bookID || r.book_id) === String(book?.bookID) && r.status === "PENDING"
+  );
+  const activeBorrow = (borrowRecords || []).find(
+    (r) => String(r.bookID || r.book_id) === String(book?.bookID) && ["BORROWED", "OVERDUE"].includes(r.status)
+  );
+  const pendingOrder = (orders || []).find(
+    (o) => String(o.bookID || o.book_id) === String(book?.bookID) && o.status === "PENDING"
+  );
 
   // ── 1. Fetch book from local backend if needed ───────────────────────────
   useEffect(() => {
@@ -349,9 +367,17 @@ export default function BookPage({
                 type="button"
                 className="bp-btn-borrow"
                 onClick={handleBorrow}
-                disabled={borrowing || Number(book.availableCopies) <= 0}
+                disabled={borrowing || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableCopies) <= 0}
               >
-                {borrowing ? "Submitting..." : Number(book.availableCopies) > 0 ? "Borrow" : "Unavailable"}
+                {borrowing
+                  ? "Submitting..."
+                  : pendingBorrow
+                  ? "Pending Admin Approval"
+                  : activeBorrow
+                  ? "Currently Borrowed"
+                  : Number(book.availableCopies) > 0
+                  ? "Borrow"
+                  : "Unavailable"}
               </button>
               <button
                 type="button"
@@ -363,8 +389,19 @@ export default function BookPage({
               </button>
             </div>
 
-            <button type="button" className="bp-btn-list" onClick={handleOrder} disabled={ordering}>
-              {ordering ? "Placing order..." : `Order book · TK ${Number(book.price || 0).toFixed(0)}`}
+            <button
+              type="button"
+              className="bp-btn-list"
+              onClick={handleOrder}
+              disabled={ordering || Boolean(pendingOrder) || Number(book.availableCopies) <= 0}
+            >
+              {ordering
+                ? "Placing order..."
+                : pendingOrder
+                ? "Pending Admin Approval"
+                : Number(book.availableCopies) <= 0
+                ? "Out of Stock"
+                : `Order book · TK ${Number(book.price || 0).toFixed(0)}`}
             </button>
 
             {/* Add to List */}
