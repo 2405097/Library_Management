@@ -624,6 +624,7 @@ export const getOrdersByUserId = async (userID) => {
     SELECT
       o."purchaseNo",
       o."orderDate",
+      COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) AS "orderedAt",
       o.price,
       o.status,
       o."approvedAt",
@@ -637,8 +638,8 @@ export const getOrdersByUserId = async (userID) => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     WHERE o."userID" = $1
-    GROUP BY o."purchaseNo", o."orderDate", o.price, o.status, o."approvedAt", o."bookID", b.title, p."publisherName"
-    ORDER BY o."orderDate" DESC;
+    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o.price, o.status, o."approvedAt", o."bookID", b.title, p."publisherName"
+    ORDER BY COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) DESC, o."purchaseNo" DESC;
   `;
   const { rows } = await pool.query(query, [userID]);
   return rows;
@@ -662,9 +663,9 @@ export const createOrder = async (userID, bookID, quantity = 1) => {
 
     const totalPrice = Number(bookResult.rows[0].price || 0) * Number(quantity);
     const orderResult = await client.query(
-      `INSERT INTO "ORDER" ("orderDate", price, quantity, status, "userID", "bookID")
-       VALUES (CURRENT_DATE, $3, $4, 'PENDING', $1, $2)
-       RETURNING "purchaseNo", "orderDate", price, quantity, status, "approvedAt", "bookID" AS book_id`,
+      `INSERT INTO "ORDER" ("orderDate", "orderedAt", price, quantity, status, "userID", "bookID")
+       VALUES (CURRENT_DATE, CURRENT_TIMESTAMP, $3, $4, 'PENDING', $1, $2)
+       RETURNING "purchaseNo", "orderDate", "orderedAt", price, quantity, status, "approvedAt", "bookID" AS book_id`,
       [userID, bookID, totalPrice, quantity]
     );
 
@@ -794,6 +795,7 @@ export const getAdminOrders = async () => {
     SELECT
       o."purchaseNo",
       o."orderDate",
+      COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) AS "orderedAt",
       o.price,
       o.quantity,
       o.status,
@@ -808,8 +810,8 @@ export const getAdminOrders = async () => {
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
     LEFT JOIN author a ON a."authorID" = ba."authorID"
-    GROUP BY o."purchaseNo", o."orderDate", o.price, o.quantity, o.status, o."approvedAt", u.name, b.title, p."publisherName"
-    ORDER BY o."orderDate" DESC;
+    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o.price, o.quantity, o.status, o."approvedAt", u.name, b.title, p."publisherName"
+    ORDER BY COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) DESC, o."purchaseNo" DESC;
   `;
   const { rows } = await pool.query(query);
   return rows;

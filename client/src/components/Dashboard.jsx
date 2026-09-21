@@ -764,7 +764,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{o.book_name}</td>
                           <td>{o.author_name || "—"}</td>
                           <td>{o.publisher_name || "—"}</td>
-                          <td>{formatDate(o.orderDate)}</td>
+                          <td>{formatDate(o.orderedAt || o.ordered_at || o.orderDate)}</td>
                           <td>TK {Number(o.price || 0).toFixed(0)}</td>
                           <td>
                             <span className={`status-chip status-${(o.status || "pending").toLowerCase()}`}>

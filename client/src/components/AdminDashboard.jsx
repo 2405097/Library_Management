@@ -575,7 +575,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.purchaseno ?? item.purchaseNo}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
-                      <td>{formatDate(item.orderdate || item.orderDate, "N/A")}</td>
+                      <td>{formatDate(item.orderedAt || item.ordered_at || item.orderdate || item.orderDate, "N/A")}</td>
                       <td>{item.quantity || 1}</td>
                       <td>TK {Number(item.price || 0).toFixed(0)}</td>
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>

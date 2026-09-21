@@ -51,7 +51,8 @@ export const initializeDatabase = async () => {
       await pool.query(`
         ALTER TABLE "ORDER"
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+        ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE,
+        ADD COLUMN IF NOT EXISTS "orderedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
       `);
       await pool.query(`
         DO $$
