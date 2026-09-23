@@ -374,7 +374,10 @@ export const searchBooksByField = async (field, keyword) => {
       b.language,
       b.edition,
       b."totalCopies",
-      b."availableCopies",
+      b."availableBorrowCopies",
+      b."availableOrderCopies",
+      (SELECT COUNT(*) FROM borrow_record br2 WHERE br2."bookID" = b."bookID" AND br2.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) AS borrow_count,
+      (SELECT COALESCE(SUM(o2.quantity), 0) FROM "ORDER" o2 WHERE o2."bookID" = b."bookID" AND o2.status = 'APPROVED') AS sold_count,
       p."publisherName",
       STRING_AGG(DISTINCT a.name, ', ') AS author_name
     FROM book b
@@ -383,7 +386,7 @@ export const searchBooksByField = async (field, keyword) => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     WHERE 1 = 1
     ${whereClause}
-    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableCopies", p."publisherName"
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies", p."publisherName"
     ORDER BY b.title ASC;
   `;
 
@@ -401,7 +404,10 @@ export const searchBooksByField = async (field, keyword) => {
     language: book.language || "English",
     edition: book.edition,
     totalCopies: book.totalCopies,
-    availableCopies: book.availableCopies,
+    availableBorrowCopies: book.availableBorrowCopies,
+    availableOrderCopies: book.availableOrderCopies,
+    borrowCount: Number(book.borrow_count || 0),
+    soldCount: Number(book.sold_count || 0),
   }));
 };
 
@@ -416,9 +422,11 @@ export const getBorrowRecordsByUserId = async (userID) => {
       br."dueDate",
       br."returnDate",
       br."delayFee",
+      br."fineActionAt",
       br.status,
       br."approvedAt",
       br."bookID",
+      br."copyNumber",
       b.title AS "bookName"
     FROM borrow_record br
     LEFT JOIN book b ON b."bookID" = br."bookID"
@@ -458,22 +466,48 @@ export const borrowBook = async (userID, bookID) => {
     }
 
     const bookResult = await client.query(
-      `UPDATE book
-       SET "availableCopies" = "availableCopies" - 1
-       WHERE "bookID" = $1 AND "availableCopies" > 0
-       RETURNING "bookID"`,
+      `SELECT "bookID", "totalCopies", "availableBorrowCopies"
+       FROM book
+       WHERE "bookID" = $1
+       FOR UPDATE`,
       [bookID]
     );
-    if (!bookResult.rows[0]) {
+    if (!bookResult.rows[0] || Number(bookResult.rows[0].availableBorrowCopies) <= 0) {
       await client.query('ROLLBACK');
       return null;
     }
 
+    const copyResult = await client.query(
+      `SELECT copy_number
+       FROM generate_series(1, $2::INT) AS copies(copy_number)
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM borrow_record br
+         WHERE br."bookID" = $1
+           AND br."copyNumber" = copies.copy_number
+           AND br.status IN ('PENDING', 'BORROWED', 'OVERDUE', 'LOST')
+       )
+       ORDER BY copy_number
+       LIMIT 1`,
+      [bookID, Number(bookResult.rows[0].totalCopies || 0)]
+    );
+    if (!copyResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `UPDATE book
+       SET "availableBorrowCopies" = "availableBorrowCopies" - 1
+       WHERE "bookID" = $1`,
+      [bookID]
+    );
+
     const borrowResult = await client.query(
-      `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID")
-       VALUES (NULL, NULL, 'PENDING', $1, $2)
-       RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "approvedAt"`,
-      [userID, bookID]
+      `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID", "copyNumber")
+       VALUES (NULL, NULL, 'PENDING', $1, $2, $3)
+       RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "copyNumber", "approvedAt"`,
+      [userID, bookID, copyResult.rows[0].copy_number]
     );
     await client.query('COMMIT');
     return borrowResult.rows[0];
@@ -531,7 +565,7 @@ export const rejectBorrow = async (borrowID) => {
 
     await client.query(
       `UPDATE book
-       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + 1)
+      SET "availableBorrowCopies" = LEAST("totalCopies", "availableBorrowCopies" + 1)
        WHERE "bookID" = $1`,
       [borrowResult.rows[0].bookID]
     );
@@ -552,10 +586,15 @@ export const returnBorrowedBook = async (borrowID) => {
     const borrowResult = await client.query(
       `UPDATE borrow_record
       SET "returnDate" = CURRENT_TIMESTAMP,
-          status = 'RETURNED',
-          "delayFee" = GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20)
+          status = CASE
+            WHEN GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20) > 0
+              THEN 'FINE_DUE'
+            ELSE 'RETURNED'
+          END,
+          "delayFee" = GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20),
+          "fineActionAt" = NULL
        WHERE "borrowID" = $1 AND status IN ('BORROWED', 'OVERDUE')
-       RETURNING "borrowID", "bookID", "returnDate", status`,
+      RETURNING "borrowID", "bookID", "returnDate", "delayFee", "fineActionAt", status`,
       [borrowID]
     );
     if (!borrowResult.rows[0]) {
@@ -565,7 +604,7 @@ export const returnBorrowedBook = async (borrowID) => {
 
     await client.query(
       `UPDATE book
-       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + 1)
+      SET "availableBorrowCopies" = LEAST("totalCopies", "availableBorrowCopies" + 1)
        WHERE "bookID" = $1`,
       [borrowResult.rows[0].bookID]
     );
@@ -577,6 +616,18 @@ export const returnBorrowedBook = async (borrowID) => {
   } finally {
     client.release();
   }
+};
+
+export const resolveBorrowFine = async (borrowID, resolution) => {
+  const status = resolution === 'RETURNED_WITH_FINE' ? resolution : 'FINE_WAIVED';
+  const query = `
+    UPDATE borrow_record
+    SET status = $2, "fineActionAt" = CURRENT_TIMESTAMP
+    WHERE "borrowID" = $1 AND status = 'FINE_DUE'
+    RETURNING "borrowID", "bookID", "returnDate", "delayFee", "fineActionAt", status;
+  `;
+  const { rows } = await pool.query(query, [borrowID, status]);
+  return rows[0] || null;
 };
 
 export const getBookReviewsByUserId = async (userID) => {
@@ -600,20 +651,23 @@ export const getBookReviewsByUserId = async (userID) => {
 export const createBookReview = async (userID, bookID, rating, comment) => {
   const query = `
     WITH eligible_book AS (
-      SELECT 1
+      SELECT 'BORROWED' AS source, COALESCE("approvedAt", "borrowDate") AS event_at
       FROM borrow_record
-  WHERE "userID" = $1 AND "bookID" = $2
-    AND status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')
+      WHERE "userID" = $1 AND "bookID" = $2
+        AND status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')
       UNION ALL
-      SELECT 1
+      SELECT 'BOUGHT' AS source, COALESCE("approvedAt", "orderedAt") AS event_at
       FROM "ORDER"
       WHERE "userID" = $1 AND "bookID" = $2 AND status = 'APPROVED'
+    ), selected_source AS (
+      SELECT source FROM eligible_book
+      ORDER BY event_at DESC NULLS LAST
       LIMIT 1
     )
-    INSERT INTO book_review ("userID", "bookID", rating, comment)
-    SELECT $1, $2, $3, $4
-    WHERE EXISTS (SELECT 1 FROM eligible_book)
-    RETURNING "reviewID", rating, comment, "createdAt", "bookID" AS book_id;
+    INSERT INTO book_review ("userID", "bookID", rating, comment, "reviewSource")
+    SELECT $1, $2, $3, $4, source
+    FROM selected_source
+    RETURNING "reviewID", rating, comment, "createdAt", "bookID" AS book_id, "reviewSource";
   `;
   const { rows } = await pool.query(query, [userID, bookID, rating, comment]);
   return rows[0] || null;
@@ -625,6 +679,8 @@ export const getOrdersByUserId = async (userID) => {
       o."purchaseNo",
       o."orderDate",
       COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) AS "orderedAt",
+      o."actualPrice",
+      o."discountPercentage",
       o.price,
       o.status,
       o."approvedAt",
@@ -638,7 +694,7 @@ export const getOrdersByUserId = async (userID) => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     WHERE o."userID" = $1
-    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o.price, o.status, o."approvedAt", o."bookID", b.title, p."publisherName"
+    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o."actualPrice", o."discountPercentage", o.price, o.status, o."approvedAt", o."bookID", b.title, p."publisherName"
     ORDER BY COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) DESC, o."purchaseNo" DESC;
   `;
   const { rows } = await pool.query(query, [userID]);
@@ -651,8 +707,8 @@ export const createOrder = async (userID, bookID, quantity = 1) => {
     await client.query('BEGIN');
     const bookResult = await client.query(
       `UPDATE book
-       SET "availableCopies" = "availableCopies" - $2
-       WHERE "bookID" = $1 AND "availableCopies" >= $2
+      SET "availableOrderCopies" = "availableOrderCopies" - $2
+      WHERE "bookID" = $1 AND "availableOrderCopies" >= $2
        RETURNING "bookID", price`,
       [bookID, quantity]
     );
@@ -663,9 +719,9 @@ export const createOrder = async (userID, bookID, quantity = 1) => {
 
     const totalPrice = Number(bookResult.rows[0].price || 0) * Number(quantity);
     const orderResult = await client.query(
-      `INSERT INTO "ORDER" ("orderDate", "orderedAt", price, quantity, status, "userID", "bookID")
-       VALUES (CURRENT_DATE, CURRENT_TIMESTAMP, $3, $4, 'PENDING', $1, $2)
-       RETURNING "purchaseNo", "orderDate", "orderedAt", price, quantity, status, "approvedAt", "bookID" AS book_id`,
+      `INSERT INTO "ORDER" ("orderDate", "orderedAt", "actualPrice", "discountPercentage", price, quantity, status, "userID", "bookID")
+       VALUES (CURRENT_DATE, CURRENT_TIMESTAMP, $3, 0, $3, $4, 'PENDING', $1, $2)
+       RETURNING "purchaseNo", "orderDate", "orderedAt", "actualPrice", "discountPercentage", price, quantity, status, "approvedAt", "bookID" AS book_id`,
       [userID, bookID, totalPrice, quantity]
     );
 
@@ -727,24 +783,67 @@ export const getAdminBooks = async () => {
       b.title,
       b.genre,
       b.price,
-      b."availableCopies",
+      b."availableBorrowCopies",
+      b."availableOrderCopies",
       b."totalCopies",
+      (SELECT COUNT(*) FROM borrow_record br WHERE br."bookID" = b."bookID" AND br.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) AS borrow_count,
+      (SELECT COALESCE(SUM(o.quantity), 0) FROM "ORDER" o WHERE o."bookID" = b."bookID" AND o.status = 'APPROVED') AS sold_count,
       p."publisherName",
       STRING_AGG(DISTINCT a.name, ', ') AS author_names
     FROM book b
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
     LEFT JOIN author a ON a."authorID" = ba."authorID"
-    GROUP BY b."bookID", b.title, b.genre, b.price, b."availableCopies", b."totalCopies", p."publisherName"
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."availableBorrowCopies", b."availableOrderCopies", b."totalCopies", p."publisherName"
     ORDER BY b."bookID" ASC;
   `;
   const { rows } = await pool.query(query);
   return rows;
 };
 
+export const updateAdminBook = async (bookID, borrowDelta, orderDelta, price) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `WITH current_book AS (
+        SELECT b."bookID", b.price, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies",
+          (SELECT COUNT(*) FROM borrow_record br
+           WHERE br."bookID" = b."bookID" AND br.status IN ('BORROWED', 'OVERDUE', 'LOST')) AS active_borrows
+        FROM book b
+        WHERE b."bookID" = $1
+        FOR UPDATE
+      )
+      UPDATE book b
+      SET "totalCopies" = current_book."totalCopies" + $2,
+          "availableBorrowCopies" = current_book."availableBorrowCopies" + $2,
+          "availableOrderCopies" = current_book."availableOrderCopies" + $3,
+          price = $4
+      FROM current_book
+      WHERE b."bookID" = current_book."bookID"
+        AND current_book."totalCopies" + $2 >= current_book.active_borrows
+        AND current_book."availableBorrowCopies" + $2 >= 0
+        AND current_book."availableOrderCopies" + $3 >= 0
+      RETURNING b."bookID", b.price, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies"`,
+      [bookID, borrowDelta, orderDelta, price]
+    );
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export const getAdminBookReviews = async () => {
   const query = `
-    SELECT br."reviewID", br.rating, br.comment, br."createdAt",
+    SELECT br."reviewID", br.rating, br.comment, br."createdAt", br."reviewSource",
            b.title AS book_name, COALESCE(u.name, 'Deleted user') AS member_name
     FROM book_review br
     LEFT JOIN book b ON b."bookID" = br."bookID"
@@ -777,8 +876,10 @@ export const getAdminBorrowRecords = async () => {
       br."returnDate",
       br.status,
       br."delayFee",
+      br."fineActionAt",
       br."approvedAt",
       br."bookID",
+      br."copyNumber",
       COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name
     FROM borrow_record br
@@ -796,6 +897,8 @@ export const getAdminOrders = async () => {
       o."purchaseNo",
       o."orderDate",
       COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) AS "orderedAt",
+      o."actualPrice",
+      o."discountPercentage",
       o.price,
       o.quantity,
       o.status,
@@ -810,21 +913,24 @@ export const getAdminOrders = async () => {
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
     LEFT JOIN author a ON a."authorID" = ba."authorID"
-    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o.price, o.quantity, o.status, o."approvedAt", u.name, b.title, p."publisherName"
+    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o."actualPrice", o."discountPercentage", o.price, o.quantity, o.status, o."approvedAt", u.name, b.title, p."publisherName"
     ORDER BY COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) DESC, o."purchaseNo" DESC;
   `;
   const { rows } = await pool.query(query);
   return rows;
 };
 
-export const approveOrder = async (purchaseNo) => {
+export const approveOrder = async (purchaseNo, discountPercentage = 0) => {
   const query = `
     UPDATE "ORDER"
-    SET status = 'APPROVED', "approvedAt" = CURRENT_TIMESTAMP
+    SET status = 'APPROVED',
+        "discountPercentage" = $2,
+        price = ROUND("actualPrice" * (1 - $2 / 100), 2),
+        "approvedAt" = CURRENT_TIMESTAMP
     WHERE "purchaseNo" = $1 AND status = 'PENDING'
-    RETURNING "purchaseNo", status, "approvedAt";
+    RETURNING "purchaseNo", "actualPrice", "discountPercentage", price, status, "approvedAt";
   `;
-  const { rows } = await pool.query(query, [purchaseNo]);
+  const { rows } = await pool.query(query, [purchaseNo, discountPercentage]);
   return rows[0] || null;
 };
 
@@ -846,7 +952,7 @@ export const rejectOrder = async (purchaseNo) => {
 
     await client.query(
       `UPDATE book
-       SET "availableCopies" = LEAST("totalCopies", "availableCopies" + $2::INT)
+      SET "availableOrderCopies" = "availableOrderCopies" + $2::INT
        WHERE "bookID" = $1`,
       [orderResult.rows[0].bookID, Number(orderResult.rows[0].quantity || 1)]
     );
@@ -872,7 +978,8 @@ export const getWishlistByUserId = async (userID) => {
       b."ISBN",
       b.genre,
       b.price,
-      b."availableCopies",
+      b."availableBorrowCopies",
+      b."availableOrderCopies",
       STRING_AGG(DISTINCT a.name, ', ') AS "authorName"
     FROM wishlist w
     JOIN book b ON b."bookID" = w."bookID"
@@ -880,7 +987,7 @@ export const getWishlistByUserId = async (userID) => {
     LEFT JOIN author a ON a."authorID" = ba."authorID"
     WHERE w."userID" = $1
     GROUP BY w."wishlistID", w."listType", w."addedAt", b."bookID", b.title,
-             b."ISBN", b.genre, b.price, b."availableCopies"
+             b."ISBN", b.genre, b.price, b."availableBorrowCopies", b."availableOrderCopies"
     ORDER BY w."listType", w."addedAt" DESC;
   `;
   const { rows } = await pool.query(query, [userID]);

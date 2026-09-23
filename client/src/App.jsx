@@ -6,7 +6,7 @@ import "./App.css";
 
 function App() {
   const [currentUser, setCurrentUser] = useState(() => {
-    const savedUser = localStorage.getItem("library_user");
+    const savedUser = sessionStorage.getItem("library_user");
     if (savedUser) {
       try {
         return JSON.parse(savedUser);
@@ -19,14 +19,14 @@ function App() {
 
   const handleLoginSuccess = (user, token) => {
     setCurrentUser(user);
-    localStorage.setItem('library_user', JSON.stringify(user));
+    sessionStorage.setItem('library_user', JSON.stringify(user));
     if (token) {
-      localStorage.setItem('library_token', token);
+      sessionStorage.setItem('library_token', token);
     }
   };
 
   const handleLogout = async () => {
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     if (token) {
       try {
         await fetch('/api/users/logout', {
@@ -38,14 +38,14 @@ function App() {
       }
     }
     setCurrentUser(null);
-    localStorage.removeItem('library_user');
-    localStorage.removeItem('library_token');
+    sessionStorage.removeItem('library_user');
+    sessionStorage.removeItem('library_token');
   };
 
   const handleAccountDeleted = () => {
     setCurrentUser(null);
-    localStorage.removeItem('library_user');
-    localStorage.removeItem('library_token');
+    sessionStorage.removeItem('library_user');
+    sessionStorage.removeItem('library_token');
   };
 
   return (

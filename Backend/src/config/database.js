@@ -42,6 +42,36 @@ export const initializeDatabase = async () => {
         );
       `);
       await pool.query(`
+        ALTER TABLE book
+        ADD COLUMN IF NOT EXISTS "availableBorrowCopies" INT,
+        ADD COLUMN IF NOT EXISTS "availableOrderCopies" INT;
+        UPDATE book
+        SET "availableBorrowCopies" = COALESCE("availableBorrowCopies", "availableCopies", "totalCopies", 0),
+            "availableOrderCopies" = COALESCE("availableOrderCopies", "totalCopies", 0);
+        ALTER TABLE book
+        ALTER COLUMN "availableBorrowCopies" SET DEFAULT 1,
+        ALTER COLUMN "availableBorrowCopies" SET NOT NULL,
+        ALTER COLUMN "availableOrderCopies" SET DEFAULT 1,
+        ALTER COLUMN "availableOrderCopies" SET NOT NULL;
+      `);
+      await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "copyNumber" INT;
+        WITH numbered_records AS (
+          SELECT
+            br."borrowID",
+            ROW_NUMBER() OVER (PARTITION BY br."bookID" ORDER BY br."borrowID") AS record_number,
+            GREATEST(b."totalCopies", 1) AS total_copies
+          FROM borrow_record br
+          JOIN book b ON b."bookID" = br."bookID"
+          WHERE br."copyNumber" IS NULL
+        )
+        UPDATE borrow_record br
+        SET "copyNumber" = ((numbered_records.record_number - 1) % numbered_records.total_copies) + 1
+        FROM numbered_records
+        WHERE br."borrowID" = numbered_records."borrowID";
+      `);
+      await pool.query(`
         ALTER TABLE borrow_record
         ALTER COLUMN "borrowDate" TYPE TIMESTAMP WITH TIME ZONE USING "borrowDate"::TIMESTAMP WITH TIME ZONE,
         ALTER COLUMN "dueDate" TYPE TIMESTAMP WITH TIME ZONE USING "dueDate"::TIMESTAMP WITH TIME ZONE,
@@ -52,7 +82,12 @@ export const initializeDatabase = async () => {
         ALTER TABLE "ORDER"
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE,
-        ADD COLUMN IF NOT EXISTS "orderedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+        ADD COLUMN IF NOT EXISTS "orderedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS "actualPrice" NUMERIC(10, 2),
+        ADD COLUMN IF NOT EXISTS "discountPercentage" NUMERIC(5, 2) NOT NULL DEFAULT 0;
+        UPDATE "ORDER" SET "actualPrice" = COALESCE("actualPrice", price), "discountPercentage" = COALESCE("discountPercentage", 0);
+        ALTER TABLE "ORDER"
+        ALTER COLUMN "actualPrice" SET NOT NULL;
       `);
       await pool.query(`
         DO $$
@@ -82,7 +117,10 @@ export const initializeDatabase = async () => {
       `);
       await pool.query(`
         ALTER TABLE borrow_record
+        ALTER COLUMN status TYPE VARCHAR(30),
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "fineActionAt" TIMESTAMP WITH TIME ZONE;
       `);
       await pool.query(`
         ALTER TABLE borrow_record
@@ -109,7 +147,7 @@ export const initializeDatabase = async () => {
           END IF;
           ALTER TABLE borrow_record
           ADD CONSTRAINT borrow_record_status_check
-          CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'OVERDUE', 'LOST', 'REJECTED'));
+          CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'FINE_DUE', 'RETURNED_WITH_FINE', 'FINE_WAIVED', 'OVERDUE', 'LOST', 'REJECTED'));
         END $$;
       `);
       await pool.query(`
@@ -182,6 +220,31 @@ export const initializeDatabase = async () => {
       await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS book_review_one_per_member_book
         ON book_review ("userID", "bookID");
+      `);
+      await pool.query(`
+        ALTER TABLE book_review
+        ADD COLUMN IF NOT EXISTS "reviewSource" VARCHAR(10);
+        UPDATE book_review br
+        SET "reviewSource" = CASE
+          WHEN EXISTS (
+            SELECT 1 FROM "ORDER" o
+            WHERE o."userID" = br."userID"
+              AND o."bookID" = br."bookID"
+              AND o.status = 'APPROVED'
+              AND COALESCE(o."approvedAt", o."orderedAt") <= br."createdAt"
+          ) AND NOT EXISTS (
+            SELECT 1 FROM borrow_record b
+            WHERE b."userID" = br."userID"
+              AND b."bookID" = br."bookID"
+              AND b.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')
+              AND COALESCE(b."approvedAt", b."borrowDate") <= br."createdAt"
+          ) THEN 'BOUGHT'
+          ELSE 'BORROWED'
+        END
+        WHERE "reviewSource" IS NULL;
+        ALTER TABLE book_review
+        ALTER COLUMN "reviewSource" SET DEFAULT 'BORROWED',
+        ALTER COLUMN "reviewSource" SET NOT NULL;
       `);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS app_migrations (

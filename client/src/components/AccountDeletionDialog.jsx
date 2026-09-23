@@ -25,7 +25,7 @@ export default function AccountDeletionDialog({ user, open, onClose, onDeleted }
     setDeleting(true);
     setError("");
     try {
-      const token = localStorage.getItem("library_token");
+      const token = sessionStorage.getItem("library_token");
       const response = await fetch(`/api/users/${user.userID}/account`, {
         method: "DELETE",
         headers: {

@@ -16,6 +16,7 @@ import {
   approveBorrow,
   rejectBorrow,
   returnBorrowedBook,
+  resolveBorrowFine,
   getBookReviewsByUserId,
   createBookReview,
   getOrdersByUserId,
@@ -28,6 +29,7 @@ import {
   getAdminFeedback,
   getAdminBorrowRecords,
   getAdminOrders,
+  updateAdminBook,
   createOrder,
   approveOrder,
   rejectOrder,
@@ -395,6 +397,28 @@ export const getAdminBooksData = async (req, res) => {
   }
 };
 
+export const updateAdminBookData = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    const borrowDelta = Number(req.body.borrowDelta || 0);
+    const orderDelta = Number(req.body.orderDelta || 0);
+    const price = Number(req.body.price);
+    if (!Number.isInteger(bookID) || !Number.isInteger(borrowDelta) || !Number.isInteger(orderDelta)) {
+      return res.status(400).json({ message: 'Book and inventory changes must be valid whole numbers.' });
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ message: 'Price must be a valid non-negative number.' });
+    }
+    const book = await updateAdminBook(bookID, borrowDelta, orderDelta, price);
+    if (!book) {
+      return res.status(409).json({ message: 'The requested inventory change is invalid or the book does not exist.' });
+    }
+    res.status(200).json({ message: 'Book details updated successfully.', book });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getAdminBookReviewsData = async (req, res) => {
   try {
     res.status(200).json(await getAdminBookReviews());
@@ -519,6 +543,22 @@ export const returnBookForAdmin = async (req, res) => {
   }
 };
 
+export const resolveFineForAdmin = async (req, res) => {
+  try {
+    const resolution = req.body?.resolution;
+    if (!['RETURNED_WITH_FINE', 'FINE_WAIVED'].includes(resolution)) {
+      return res.status(400).json({ message: 'A valid fine resolution is required.' });
+    }
+    const record = await resolveBorrowFine(Number(req.params.borrowID), resolution);
+    if (!record) {
+      return res.status(409).json({ message: 'This fine is already resolved or does not exist.' });
+    }
+    res.status(200).json({ message: 'Fine resolution recorded successfully.', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const createOrderForUser = async (req, res) => {
   try {
     const bookID = Number(req.body.bookID);
@@ -536,7 +576,11 @@ export const createOrderForUser = async (req, res) => {
 
 export const approveOrderForAdmin = async (req, res) => {
   try {
-    const order = await approveOrder(Number(req.params.purchaseNo));
+    const discountPercentage = Number(req.body?.discountPercentage ?? 0);
+    if (!Number.isFinite(discountPercentage) || discountPercentage < 0 || discountPercentage > 50) {
+      return res.status(400).json({ message: 'Discount must be between 0% and 50%.' });
+    }
+    const order = await approveOrder(Number(req.params.purchaseNo), discountPercentage);
     if (!order) return res.status(409).json({ message: 'This order is already approved or does not exist' });
     res.status(200).json({ message: 'Order approved successfully', order });
   } catch (error) {

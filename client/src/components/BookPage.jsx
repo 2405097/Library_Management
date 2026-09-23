@@ -69,7 +69,7 @@ export default function BookPage({
     async function loadLocalBook() {
       setLoadingBook(true);
       try {
-        const token = localStorage.getItem("library_token");
+        const token = sessionStorage.getItem("library_token");
         const headers = token ? { Authorization: "Bearer " + token } : {};
         const res = await fetch(`/api/books/search?field=bookID&keyword=${effectiveBookId}`, { headers });
         if (res.ok) {
@@ -367,7 +367,7 @@ export default function BookPage({
                 type="button"
                 className="bp-btn-borrow"
                 onClick={handleBorrow}
-                disabled={borrowing || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableCopies) <= 0}
+                disabled={borrowing || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableBorrowCopies) <= 0}
               >
                 {borrowing
                   ? "Submitting..."
@@ -375,7 +375,7 @@ export default function BookPage({
                   ? "Pending Admin Approval"
                   : activeBorrow
                   ? "Currently Borrowed"
-                  : Number(book.availableCopies) > 0
+                  : Number(book.availableBorrowCopies) > 0
                   ? "Borrow"
                   : "Unavailable"}
               </button>
@@ -393,13 +393,13 @@ export default function BookPage({
               type="button"
               className="bp-btn-list"
               onClick={handleOrder}
-              disabled={ordering || Boolean(pendingOrder) || Number(book.availableCopies) <= 0}
+              disabled={ordering || Boolean(pendingOrder) || Number(book.availableOrderCopies) <= 0}
             >
               {ordering
                 ? "Placing order..."
                 : pendingOrder
                 ? "Pending Admin Approval"
-                : Number(book.availableCopies) <= 0
+                : Number(book.availableOrderCopies) <= 0
                 ? "Out of Stock"
                 : `Order book · TK ${Number(book.price || 0).toFixed(0)}`}
             </button>
@@ -631,15 +631,27 @@ export default function BookPage({
                   <span>Status:</span>
                   <span
                     className={`bp-inv-badge ${
-                      (book.availableCopies ?? 1) > 0 ? "available" : "none"
+                      (book.availableBorrowCopies ?? 1) > 0 ? "available" : "none"
                     }`}
                   >
-                    {(book.availableCopies ?? 1) > 0 ? "In Circulation" : "Unavailable"}
+                    {(book.availableBorrowCopies ?? 1) > 0 ? "In Circulation" : "Unavailable"}
                   </span>
                 </div>
                 <div className="bp-inv-item">
-                  <span>Available Copies:</span>
-                  <strong>{book.availableCopies ?? 1} / {book.totalCopies ?? 1}</strong>
+                  <span>Available Copies for Borrow:</span>
+                  <strong>{book.availableBorrowCopies ?? 0} / {book.totalCopies ?? 0}</strong>
+                </div>
+                <div className="bp-inv-item">
+                  <span>Available Copies for Order:</span>
+                  <strong>{book.availableOrderCopies ?? 0}</strong>
+                </div>
+                <div className="bp-inv-item">
+                  <span>Borrowed for:</span>
+                  <strong>{book.borrowCount ?? 0} times</strong>
+                </div>
+                <div className="bp-inv-item">
+                  <span>Sold:</span>
+                  <strong>{book.soldCount ?? 0}</strong>
                 </div>
                 <div className="bp-inv-item">
                   <span>Edition:</span>

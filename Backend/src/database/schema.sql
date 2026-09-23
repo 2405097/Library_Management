@@ -46,6 +46,8 @@ CREATE TABLE BOOK (
   book_copy INT DEFAULT 1 CHECK (book_copy >= 0),
   "totalCopies" INT DEFAULT 1 CHECK ("totalCopies" >= 0),
   "availableCopies" INT DEFAULT 1 CHECK ("availableCopies" >= 0),
+  "availableBorrowCopies" INT DEFAULT 1 CHECK ("availableBorrowCopies" >= 0),
+  "availableOrderCopies" INT DEFAULT 1 CHECK ("availableOrderCopies" >= 0),
   "publisherID" INT REFERENCES PUBLISHER("publisherID") ON DELETE SET NULL
 );
 
@@ -71,8 +73,10 @@ CREATE TABLE BORROW_RECORD (
   "dueDate" TIMESTAMP WITH TIME ZONE,
   "returnDate" TIMESTAMP WITH TIME ZONE,
   "delayFee" NUMERIC(10, 2) DEFAULT 0.0 CHECK ("delayFee" >= 0),
-  status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'OVERDUE', 'LOST', 'REJECTED')),
+  status VARCHAR(30) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'FINE_DUE', 'RETURNED_WITH_FINE', 'FINE_WAIVED', 'OVERDUE', 'LOST', 'REJECTED')),
   "approvedAt" TIMESTAMP WITH TIME ZONE,
+  "fineActionAt" TIMESTAMP WITH TIME ZONE,
+  "copyNumber" INT CHECK ("copyNumber" > 0),
   "userID" INT REFERENCES USERS("userID") ON DELETE SET NULL,
   "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE RESTRICT
 );
@@ -95,6 +99,8 @@ CREATE TABLE "ORDER" (
   "purchaseNo" SERIAL PRIMARY KEY,
   "orderDate" DATE NOT NULL DEFAULT CURRENT_DATE,
   "orderedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "actualPrice" NUMERIC(10, 2) CHECK ("actualPrice" >= 0),
+  "discountPercentage" NUMERIC(5, 2) NOT NULL DEFAULT 0 CHECK ("discountPercentage" >= 0 AND "discountPercentage" <= 50),
   price NUMERIC(10, 2) CHECK (price >= 0),
   quantity INT DEFAULT 1 CHECK (quantity > 0),
   status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
@@ -107,6 +113,7 @@ CREATE TABLE BOOK_REVIEW (
   "reviewID" SERIAL PRIMARY KEY,
   rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
   comment TEXT,
+  "reviewSource" VARCHAR(10) NOT NULL DEFAULT 'BORROWED' CHECK ("reviewSource" IN ('BORROWED', 'BOUGHT')),
   "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   "userID" INT NOT NULL REFERENCES USERS("userID") ON DELETE CASCADE,
   "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE CASCADE

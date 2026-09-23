@@ -20,6 +20,10 @@ const GENRES = [
   { query: 'subject:(romance)',           genre: 'Romance' },
   { query: 'subject:(history)',           genre: 'History' },
   { query: 'subject:(biography)',         genre: 'Biography' },
+  { query: 'subject:(mathematics)',       genre: 'Mathematics' },
+  { query: 'subject:(science)',           genre: 'Science' },
+  { query: 'subject:(computer science)',  genre: 'CSE' },
+  { query: 'subject:(algorithms)',        genre: 'Algorithms' },
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -156,8 +160,8 @@ async function seedGenre({ query, genre }) {
 
       const bookRes = await client.query(
         `INSERT INTO book
-           (title, genre, "ISBN", "publicationYear", price, "totalCopies", "availableCopies", "publisherID", language)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'English')
+           (title, genre, "ISBN", "publicationYear", price, "totalCopies", "availableCopies", "availableBorrowCopies", "availableOrderCopies", "publisherID", language)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $7, $8, 'English')
          RETURNING "bookID"`,
         [
           title.slice(0, 255),

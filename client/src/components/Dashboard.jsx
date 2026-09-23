@@ -95,7 +95,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   useEffect(() => {
     if (!user?.userID) return;
     const base = `/api/users/${user.userID}`;
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
     Promise.all([
       fetch(`${base}/borrow-records`, { headers: authHeaders }),
@@ -191,7 +191,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
       throw new Error("You already have this book borrowed.");
     }
 
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/borrow`, {
       method: 'POST',
       headers: {
@@ -202,8 +202,8 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not borrow this book.');
-    setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
-    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableCopies: Math.max(0, Number(b.availableCopies || 0) - 1) } : b));
+    setSelectedBook((current) => current ? { ...current, availableBorrowCopies: Math.max(0, Number(current.availableBorrowCopies || 0) - 1) } : current);
+    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableBorrowCopies: Math.max(0, Number(b.availableBorrowCopies || 0) - 1) } : b));
     setBorrowRecords((current) => [
       { ...data.record, bookName: book.title },
       ...current,
@@ -212,7 +212,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   };
 
   const handleOrder = async (book) => {
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
@@ -220,14 +220,14 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Could not place this order.');
-    setSelectedBook((current) => current ? { ...current, availableCopies: Math.max(0, Number(current.availableCopies || 0) - 1) } : current);
-    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableCopies: Math.max(0, Number(b.availableCopies || 0) - 1) } : b));
+    setSelectedBook((current) => current ? { ...current, availableOrderCopies: Math.max(0, Number(current.availableOrderCopies || 0) - 1) } : current);
+    setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableOrderCopies: Math.max(0, Number(b.availableOrderCopies || 0) - 1) } : b));
     setOrderInfo((current) => [{ ...data.order, book_name: book.title, author_name: book.authorName, publisher_name: book.publisher }, ...current]);
     window.alert('Order placed. It is waiting for admin confirmation.');
   };
 
   const handleAddToWishlist = async (book, listType) => {
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/wishlist`, {
       method: 'POST',
       headers: {
@@ -247,7 +247,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   };
 
   const handleRemoveFromWishlist = async (bookID, listType) => {
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const response = await fetch(
       `/api/users/${user.userID}/wishlist/${bookID}?listType=${encodeURIComponent(listType)}`,
       {
@@ -263,7 +263,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   };
 
   const handleMoveInWishlist = async (bookID, fromList, toList) => {
-    const token = localStorage.getItem('library_token');
+    const token = sessionStorage.getItem('library_token');
     const response = await fetch(`/api/users/${user.userID}/wishlist/${bookID}`, {
       method: 'PATCH',
       headers: {
@@ -374,7 +374,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     e.preventDefault();
     if (!newReviewData.reportDetails.trim()) return;
     try {
-      const token = localStorage.getItem('library_token');
+      const token = sessionStorage.getItem('library_token');
       const res = await fetch(`/api/users/${user.userID}/library-reviews`, {
         method: 'POST',
         headers: {
@@ -417,7 +417,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     e.preventDefault();
     if (!bookReviewTarget || !bookReviewDraft.comment.trim()) return;
     try {
-      const token = localStorage.getItem('library_token');
+      const token = sessionStorage.getItem('library_token');
       const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
         method: 'POST',
         headers: {
@@ -450,7 +450,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     }
 
     try {
-      const token = localStorage.getItem("library_token");
+      const token = sessionStorage.getItem("library_token");
       const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
         method: "POST",
         headers: {
@@ -660,7 +660,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                           <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
                           <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
                           <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
-                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status === "PENDING" ? "Pending Admin Approval" : r.status}</span></td>
+                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status === "PENDING" ? "Pending Admin Approval" : r.status === "FINE_DUE" ? "Fine due" : r.status === "RETURNED_WITH_FINE" ? "Returned with fine" : r.status === "FINE_WAIVED" ? "Fine waved" : r.status}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -970,6 +970,10 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
               <BookShelf genre="Romance" label="Romance" onBookClick={handleSelectBook} />
               <BookShelf genre="History" label="History" onBookClick={handleSelectBook} />
               <BookShelf genre="Biography" label="Biography" onBookClick={handleSelectBook} />
+              <BookShelf genre="Mathematics" label="Mathematics" onBookClick={handleSelectBook} />
+              <BookShelf genre="Science" label="Science" onBookClick={handleSelectBook} />
+              <BookShelf genre="CSE" label="CSE" onBookClick={handleSelectBook} />
+              <BookShelf genre="Algorithms" label="Algorithms" onBookClick={handleSelectBook} />
             </div>
           </div>
         ) : (
