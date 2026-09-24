@@ -831,43 +831,58 @@
   text-align: left;
 }
 
-/* Admins Table Column Widths & Spacing */
+/* Member and admin table column widths */
+.admin-table-members,
 .admin-table-admins {
   table-layout: fixed;
   width: 100%;
-  min-width: 800px;
+  min-width: 960px;
 }
+.admin-table-members th:nth-child(1),
+.admin-table-members td:nth-child(1),
 .admin-table-admins th:nth-child(1),
-.admin-table-admins td:nth-child(1) { width: 10%; }
+.admin-table-admins td:nth-child(1) { width: 9%; white-space: nowrap; }
+.admin-table-members th:nth-child(2),
+.admin-table-members td:nth-child(2),
 .admin-table-admins th:nth-child(2),
-.admin-table-admins td:nth-child(2) { width: 18%; overflow-wrap: break-word; }
+.admin-table-admins td:nth-child(2) { width: 18%; overflow-wrap: anywhere; }
+.admin-table-members th:nth-child(3),
+.admin-table-members td:nth-child(3),
 .admin-table-admins th:nth-child(3),
-.admin-table-admins td:nth-child(3) { width: 24%; overflow-wrap: break-word; }
+.admin-table-admins td:nth-child(3) { width: 25%; overflow-wrap: anywhere; }
+.admin-table-members th:nth-child(4),
+.admin-table-members td:nth-child(4),
 .admin-table-admins th:nth-child(4),
-.admin-table-admins td:nth-child(4) { width: 15%; white-space: nowrap; }
+.admin-table-admins td:nth-child(4) { width: 13%; white-space: nowrap; }
+.admin-table-members th:nth-child(5),
+.admin-table-members td:nth-child(5),
 .admin-table-admins th:nth-child(5),
-.admin-table-admins td:nth-child(5) { width: 20%; overflow-wrap: break-word; }
+.admin-table-admins td:nth-child(5) { width: 20%; overflow-wrap: anywhere; }
+.admin-table-members th:nth-child(6),
+.admin-table-members td:nth-child(6),
 .admin-table-admins th:nth-child(6),
-.admin-table-admins td:nth-child(6) { width: 13%; white-space: nowrap; }
+.admin-table-admins td:nth-child(6) { width: 15%; white-space: nowrap; }
 
-/* Signup Approvals Table Column Widths & Spacing */
-.admin-table-signups {
+.admin-signup-note {
+  margin: -8px 0 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.admin-table-admin-signups {
   table-layout: fixed;
   width: 100%;
   min-width: 800px;
 }
-.admin-table-signups th:nth-child(1),
-.admin-table-signups td:nth-child(1) { width: 10%; }
-.admin-table-signups th:nth-child(2),
-.admin-table-signups td:nth-child(2) { width: 18%; overflow-wrap: break-word; }
-.admin-table-signups th:nth-child(3),
-.admin-table-signups td:nth-child(3) { width: 24%; overflow-wrap: break-word; }
-.admin-table-signups th:nth-child(4),
-.admin-table-signups td:nth-child(4) { width: 12%; white-space: nowrap; }
-.admin-table-signups th:nth-child(5),
-.admin-table-signups td:nth-child(5) { width: 16%; white-space: nowrap; }
-.admin-table-signups th:nth-child(6),
-.admin-table-signups td:nth-child(6) { width: 20%; }
+.admin-table-admin-signups th:nth-child(1),
+.admin-table-admin-signups td:nth-child(1) { width: 10%; white-space: nowrap; }
+.admin-table-admin-signups th:nth-child(2),
+.admin-table-admin-signups td:nth-child(2) { width: 20%; overflow-wrap: anywhere; }
+.admin-table-admin-signups th:nth-child(3),
+.admin-table-admin-signups td:nth-child(3) { width: 28%; overflow-wrap: anywhere; }
+.admin-table-admin-signups th:nth-child(4),
+.admin-table-admin-signups td:nth-child(4) { width: 22%; white-space: nowrap; }
+.admin-table-admin-signups th:nth-child(5),
+.admin-table-admin-signups td:nth-child(5) { width: 20%; }
 
 /* Book Reviews Table Column Widths & Spacing */
 .section-heading-row {
@@ -875,6 +890,47 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+.section-heading-row.book-table-heading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px) minmax(0, 1fr);
+  align-items: center;
+}
+.book-table-heading-row h3 {
+  grid-column: 1;
+  justify-self: start;
+  margin: 0;
+}
+.book-table-heading-row .table-search-input {
+  grid-column: 2;
+  justify-self: center;
+  width: 100%;
+  min-width: 0;
+}
+.book-table-heading-row .pagination-controls {
+  grid-column: 3;
+  justify-self: end;
+  margin-top: 0;
+}
+.table-search-input {
+  width: min(220px, 100%);
+  min-width: 150px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-warm);
+  border-radius: 5px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+.table-search-input:focus {
+  outline: 2px solid rgba(26, 101, 158, 0.2);
+  border-color: var(--accent-blue);
+}
+.table-empty-message {
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 .pagination-controls {
   display: flex;
@@ -1221,7 +1277,26 @@
   .account-actions-row .account-danger-zone button { width: 100%; }
   .account-edit-actions { justify-content: flex-start; }
   .section-heading-row { align-items: flex-start; flex-direction: column; }
+  .table-search-input { width: 100%; }
   .pagination-controls { width: 100%; justify-content: space-between; margin-top: -8px; }
+  .section-heading-row.book-table-heading-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+    gap: 12px;
+  }
+  .book-table-heading-row h3,
+  .book-table-heading-row .table-search-input,
+  .book-table-heading-row .pagination-controls {
+    grid-column: 1;
+  }
+  .book-table-heading-row .table-search-input {
+    justify-self: center;
+    width: min(100%, 320px);
+  }
+  .book-table-heading-row .pagination-controls {
+    justify-self: stretch;
+    margin-top: 0;
+  }
 
   .welcome-screen {
     min-height: auto;

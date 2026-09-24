@@ -9,6 +9,7 @@ export const createUser = async ({
   phone,
   address,
   role = "MEMBER",
+  isApproved = true,
   password,
   passHash,
   username,
@@ -18,11 +19,11 @@ export const createUser = async ({
     await client.query("BEGIN");
 
     const query = `
-      INSERT INTO users (name, email, phone, address, role, "isApproved")
-      VALUES ($1, $2, $3, $4, $5, FALSE)
+      INSERT INTO users (name, email, phone, address, role, "isApproved", "approvedAt")
+      VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN CURRENT_TIMESTAMP ELSE NULL END)
       RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio;
     `;
-    const values = [name, email, phone, address, role];
+    const values = [name, email, phone, address, role, isApproved];
     const { rows } = await client.query(query, values);
     const user = rows[0];
 
@@ -86,6 +87,17 @@ export const getAllUsers = async () => {
   `;
   const { rows } = await pool.query(query);
   return rows;
+};
+
+export const approvePendingAdminSignup = async (userID) => {
+  const query = `
+    UPDATE users
+    SET "isApproved" = TRUE, "approvedAt" = CURRENT_TIMESTAMP
+    WHERE "userID" = $1 AND role = 'ADMIN' AND "isApproved" = FALSE
+    RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio;
+  `;
+  const { rows } = await pool.query(query, [userID]);
+  return rows[0] || null;
 };
 
 /**
@@ -163,17 +175,6 @@ export const updateUser = async (
   } finally {
     client.release();
   }
-};
-
-export const approveUser = async (userID) => {
-  const query = `
-    UPDATE users
-    SET "isApproved" = TRUE, "approvedAt" = CURRENT_TIMESTAMP
-    WHERE "userID" = $1 AND "isApproved" = FALSE
-    RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio;
-  `;
-  const { rows } = await pool.query(query, [userID]);
-  return rows[0] || null;
 };
 
 export const deleteUserAccount = async (userID, token) => {

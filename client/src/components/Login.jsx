@@ -125,7 +125,9 @@ export default function Login({ onLoginSuccess }) {
           throw new Error(data.message || "Failed to create account");
         }
 
-        setSuccessMessage("Account created successfully! Please sign in.");
+        setSuccessMessage(role === "ADMIN"
+          ? "Admin signup submitted. An existing admin must approve it before you can sign in."
+          : "Account created successfully! You can now sign in.");
         setIsLoginMode(true);
         setFormData((prev) => ({
           ...prev,
@@ -205,11 +207,13 @@ export default function Login({ onLoginSuccess }) {
           {/* Right form panel */}
           <div className="auth-panel-right">
             <div className="auth-form-header">
-              <h2>{isLoginMode ? "Welcome back" : "Create account"}</h2>
+              <h2>{isLoginMode ? "Welcome back" : accountType === "ADMIN" ? "Create admin account" : "Create account"}</h2>
               <p className="auth-subtitle">
                 {isLoginMode
                   ? "Sign in to continue to the library"
-                  : "Fill in your details to get started"}
+                  : accountType === "ADMIN"
+                    ? "Admin accounts require approval by an existing admin."
+                    : "Fill in your details to get started"}
               </p>
             </div>
 
@@ -304,21 +308,23 @@ export default function Login({ onLoginSuccess }) {
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="role">Role <span className="required">*</span></label>
-                <div className="select-wrapper">
-                  <select
-                    id="role"
-                    value={accountType}
-                    onChange={(e) => setAccountType(e.target.value)}
-                    className="form-control"
-                  >
-                    <option value="MEMBER">Member</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
-                  <span className="select-arrow">▾</span>
+              {isLoginMode && (
+                <div className="form-group">
+                  <label htmlFor="role">Role <span className="required">*</span></label>
+                  <div className="select-wrapper">
+                    <select
+                      id="role"
+                      value={accountType}
+                      onChange={(e) => setAccountType(e.target.value)}
+                      className="form-control"
+                    >
+                      <option value="MEMBER">Member</option>
+                      <option value="ADMIN">Admin</option>
+                    </select>
+                    <span className="select-arrow">▾</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"

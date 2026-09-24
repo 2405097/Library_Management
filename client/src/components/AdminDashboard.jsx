@@ -5,7 +5,7 @@ import AccountDeletionDialog from "./AccountDeletionDialog";
 const adminTabs = [
   { key: "member_info", label: "Member Info" },
   { key: "admin_info", label: "Admin Info" },
-  { key: "signup_approvals", label: "Signup Approval" },
+  { key: "admin_signup_approvals", label: "Admin Signup Approval" },
   { key: "library_info", label: "Library Info" },
   { key: "book_info", label: "Book Info" },
   { key: "borrow_book_info", label: "Borrow Book Info" },
@@ -57,13 +57,16 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [bookPage, setBookPage] = useState(0);
   const [borrowPage, setBorrowPage] = useState(0);
   const [orderPage, setOrderPage] = useState(0);
+  const [bookSearch, setBookSearch] = useState("");
+  const [borrowBookSearch, setBorrowBookSearch] = useState("");
+  const [orderBookSearch, setOrderBookSearch] = useState("");
   const [bookReviews, setBookReviews] = useState([]);
   const [reviewFilter, setReviewFilter] = useState("ALL");
   const [feedback, setFeedback] = useState([]);
   const [members, setMembers] = useState([]);
   const [admins, setAdmins] = useState([]);
-  const [pendingSignups, setPendingSignups] = useState([]);
-  const [approvingSignupID, setApprovingSignupID] = useState(null);
+  const [pendingAdminSignups, setPendingAdminSignups] = useState([]);
+  const [approvingAdminSignupID, setApprovingAdminSignupID] = useState(null);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [resolvingFineID, setResolvingFineID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
@@ -133,8 +136,8 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         setBookReviews(reviewData);
         setFeedback(feedbackData);
         setMembers(usersData.filter((account) => account.role === "MEMBER"));
-        setAdmins(usersData.filter((account) => account.role === "ADMIN"));
-        setPendingSignups(usersData.filter((account) => account.isApproved === false));
+        setAdmins(usersData.filter((account) => account.role === "ADMIN" && account.isApproved !== false));
+        setPendingAdminSignups(usersData.filter((account) => account.role === "ADMIN" && account.isApproved === false));
       } catch {
         setSummary(DEFAULT_SUMMARY);
         updateBookInfo([]);
@@ -142,7 +145,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         updateOrderedBookInfo([]);
         setMembers([]);
         setAdmins([]);
-        setPendingSignups([]);
+        setPendingAdminSignups([]);
       }
     };
 
@@ -361,30 +364,30 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
-  const approveSignup = async (userID) => {
-    setApprovingSignupID(userID);
-    try {
-      const token = sessionStorage.getItem('library_token');
-      const response = await fetch(`/api/admin/signup-approvals/${userID}/approve`, {
-        method: 'POST',
-        headers: token ? { Authorization: 'Bearer ' + token } : {},
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Could not approve signup.');
-      setPendingSignups((current) => current.filter((account) => String(account.userID) !== String(userID)));
-      setMembers((current) => current.map((account) => String(account.userID) === String(userID) ? data.user : account));
-      setAdmins((current) => current.map((account) => String(account.userID) === String(userID) ? data.user : account));
-    } catch (error) {
-      window.alert(error.message);
-    } finally {
-      setApprovingSignupID(null);
-    }
-  };
-
   const openBookChange = (book) => {
     setChangeBook(book);
     setChangeForm({ borrowDelta: 0, orderDelta: 0, price: Number(book.price || 0).toFixed(2) });
     setActiveTab("change_book");
+  };
+
+  const approveAdminSignup = async (userID) => {
+    setApprovingAdminSignupID(userID);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/admin-signup-approvals/${userID}/approve`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not approve admin signup.');
+
+      setPendingAdminSignups((current) => current.filter((account) => String(account.userID) !== String(userID)));
+      setAdmins((current) => [data.user, ...current.filter((account) => String(account.userID) !== String(userID))]);
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setApprovingAdminSignupID(null);
+    }
   };
 
   const saveBookChange = async (event) => {
@@ -539,12 +542,38 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const filteredBookReviews = reviewFilter === "ALL"
     ? bookReviews
     : bookReviews.filter((review) => review.reviewSource === reviewFilter);
-  const totalBookPages = Math.ceil(bookInfo.length / BOOKS_PER_PAGE);
-  const totalBorrowPages = Math.ceil(borrowBookInfo.length / BORROWS_PER_PAGE);
-  const totalOrderPages = Math.ceil(orderedBookInfo.length / ORDERS_PER_PAGE);
-  const paginatedBooks = bookInfo.slice(bookPage * BOOKS_PER_PAGE, (bookPage + 1) * BOOKS_PER_PAGE);
-  const paginatedBorrows = borrowBookInfo.slice(borrowPage * BORROWS_PER_PAGE, (borrowPage + 1) * BORROWS_PER_PAGE);
-  const paginatedOrders = orderedBookInfo.slice(orderPage * ORDERS_PER_PAGE, (orderPage + 1) * ORDERS_PER_PAGE);
+  const matchesBookSearch = (values, query) => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return !normalizedQuery || values.some((value) => String(value || "").toLocaleLowerCase().includes(normalizedQuery));
+  };
+  const filteredBooks = bookInfo.filter((book) => matchesBookSearch([
+    book.title,
+    book.genre,
+    book.author_names,
+    book.authorName,
+    book.publishername,
+    book.publisherName,
+    book.bookid,
+    book.bookID,
+  ], bookSearch));
+  const filteredBorrows = borrowBookInfo.filter((item) => matchesBookSearch([
+    item.book_name,
+    item.bookName,
+    item.bookid,
+    item.bookID,
+  ], borrowBookSearch));
+  const filteredOrders = orderedBookInfo.filter((item) => matchesBookSearch([
+    item.book_name,
+    item.bookName,
+    item.bookid,
+    item.bookID,
+  ], orderBookSearch));
+  const totalBookPages = Math.ceil(filteredBooks.length / BOOKS_PER_PAGE);
+  const totalBorrowPages = Math.ceil(filteredBorrows.length / BORROWS_PER_PAGE);
+  const totalOrderPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+  const paginatedBooks = filteredBooks.slice(bookPage * BOOKS_PER_PAGE, (bookPage + 1) * BOOKS_PER_PAGE);
+  const paginatedBorrows = filteredBorrows.slice(borrowPage * BORROWS_PER_PAGE, (borrowPage + 1) * BORROWS_PER_PAGE);
+  const paginatedOrders = filteredOrders.slice(orderPage * ORDERS_PER_PAGE, (orderPage + 1) * ORDERS_PER_PAGE);
   const sidebarActiveTab = activeTab === "change_book" ? "book_info" : activeTab;
 
   return (
@@ -740,23 +769,37 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           </div>
         )}
 
-        {activeTab === "signup_approvals" && (
+        {activeTab === "admin_signup_approvals" && (
           <div className="content-panel">
-            <h3>Signup Approval</h3>
+            <h3>Admin Signup Approval</h3>
+            <p className="admin-signup-note">Only an existing admin can approve these requests.</p>
             <div className="table-wrap">
-              <table className="admin-table admin-table-signups">
-                <thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th><th>Signup Date</th><th>Action</th></tr></thead>
+              <table className="admin-table admin-table-admin-signups">
+                <thead>
+                  <tr><th>Request ID</th><th>Name</th><th>Email</th><th>Signup Date</th><th>Action</th></tr>
+                </thead>
                 <tbody>
-                  {pendingSignups.map((account) => (
+                  {pendingAdminSignups.map((account) => (
                     <tr key={account.userID}>
-                      <td>{account.userID}</td><td>{account.name}</td><td>{account.email}</td><td>{account.role}</td>
+                      <td>{account.userID}</td>
+                      <td>{account.name}</td>
+                      <td>{account.email}</td>
                       <td>{formatDate(account.createdAt, "N/A")}</td>
-                      <td><button type="button" className="btn btn-primary small-btn" disabled={approvingSignupID === account.userID} onClick={() => approveSignup(account.userID)}>{approvingSignupID === account.userID ? "Approving..." : "Approve Signup"}</button></td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-primary small-btn"
+                          disabled={approvingAdminSignupID === account.userID}
+                          onClick={() => approveAdminSignup(account.userID)}
+                        >
+                          {approvingAdminSignupID === account.userID ? "Approving..." : "Approve Admin"}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!pendingSignups.length && <p>No pending signups.</p>}
+              {!pendingAdminSignups.length && <p>No pending admin signup requests.</p>}
             </div>
           </div>
         )}
@@ -777,8 +820,19 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "book_info" && (
           <div className="content-panel">
-            <div className="section-heading-row">
+            <div className="section-heading-row book-table-heading-row">
               <h3>Book Info</h3>
+              <input
+                className="table-search-input"
+                type="search"
+                aria-label="Search books by title, author, genre, publisher, or ID"
+                placeholder="Search books..."
+                value={bookSearch}
+                onChange={(event) => {
+                  setBookSearch(event.target.value);
+                  setBookPage(0);
+                }}
+              />
               {totalBookPages > 1 && (
                 <div className="pagination-controls" aria-label="Book table pagination">
                   <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((page) => page - 1)}>
@@ -822,6 +876,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   ))}
                 </tbody>
               </table>
+              {!paginatedBooks.length && <p className="table-empty-message">No books match your search.</p>}
             </div>
           </div>
         )}
@@ -864,8 +919,19 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "borrow_book_info" && (
           <div className="content-panel">
-            <div className="section-heading-row">
+            <div className="section-heading-row book-table-heading-row">
               <h3>Borrow Book Info</h3>
+              <input
+                className="table-search-input"
+                type="search"
+                aria-label="Search borrowed books by title or book ID"
+                placeholder="Search books..."
+                value={borrowBookSearch}
+                onChange={(event) => {
+                  setBorrowBookSearch(event.target.value);
+                  setBorrowPage(0);
+                }}
+              />
               {totalBorrowPages > 1 && (
                 <div className="pagination-controls" aria-label="Borrow table pagination">
                   <button type="button" disabled={borrowPage === 0} onClick={() => setBorrowPage((page) => page - 1)}>
@@ -977,25 +1043,35 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   ))}
                 </tbody>
               </table>
+              {!paginatedBorrows.length && <p className="table-empty-message">No borrow records match your search.</p>}
             </div>
           </div>
         )}
 
         {activeTab === "ordered_book_info" && (
           <div className="content-panel">
-            <div className="section-heading-row">
+            <div className="section-heading-row book-table-heading-row">
               <h3>Ordered Book Info</h3>
-              {totalOrderPages > 1 && (
-                <div className="pagination-controls" aria-label="Order table pagination">
-                  <button type="button" disabled={orderPage === 0} onClick={() => setOrderPage((page) => page - 1)}>
-                    ← Previous Page
-                  </button>
-                  <span>Page {orderPage + 1} of {totalOrderPages}</span>
-                  <button type="button" disabled={orderPage >= totalOrderPages - 1} onClick={() => setOrderPage((page) => page + 1)}>
-                    Next Page →
-                  </button>
-                </div>
-              )}
+              <input
+                className="table-search-input"
+                type="search"
+                aria-label="Search ordered books by title or book ID"
+                placeholder="Search books..."
+                value={orderBookSearch}
+                onChange={(event) => {
+                  setOrderBookSearch(event.target.value);
+                  setOrderPage(0);
+                }}
+              />
+              <div className="pagination-controls" aria-label="Order table pagination">
+                <button type="button" disabled={orderPage === 0 || totalOrderPages === 0} onClick={() => setOrderPage((page) => page - 1)}>
+                  ← Previous Page
+                </button>
+                <span>{totalOrderPages ? `Page ${orderPage + 1} of ${totalOrderPages}` : "No matches"}</span>
+                <button type="button" disabled={orderPage >= totalOrderPages - 1} onClick={() => setOrderPage((page) => page + 1)}>
+                  Next Page →
+                </button>
+              </div>
             </div>
             <div className="table-wrap">
               <table className="admin-table admin-table-orders">
@@ -1072,6 +1148,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   ))}
                 </tbody>
               </table>
+              {!paginatedOrders.length && <p className="table-empty-message">No order records match your search.</p>}
             </div>
           </div>
         )}

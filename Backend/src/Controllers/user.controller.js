@@ -6,6 +6,7 @@ import {
   findUserById, 
   findUserByEmail, 
   findUser,
+  approvePendingAdminSignup,
   findUserWithCredentialsById,
   updateLastLogin,
   getAllUsers,
@@ -38,7 +39,6 @@ import {
   removeFromWishlist,
   moveInWishlist,
   updateUserCredentials
-  , approveUser
 } from '../Models/user.model.js';
 
 const WISHLIST_LIST_TYPES = ['CURRENTLY_READING', 'WANT_TO_READ', 'FAVORITES'];
@@ -70,8 +70,8 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    if (user.isApproved === false) {
-      return res.status(403).json({ message: 'Your signup is awaiting admin approval.' });
+    if (user.role === 'ADMIN' && user.isApproved === false) {
+      return res.status(403).json({ message: 'Admin account creation waiting for approval...' });
     }
 
     if (!isBcryptHash) {
@@ -126,11 +126,19 @@ export const getUsers = async (req, res) => {
   }
 };
 
-export const approveNewUser = async (req, res) => {
+export const approveAdminSignup = async (req, res) => {
   try {
-    const user = await approveUser(Number(req.params.id));
-    if (!user) return res.status(409).json({ message: 'User is already approved or does not exist' });
-    res.status(200).json({ message: 'Signup approved successfully', user });
+    const userID = Number(req.params.id);
+    if (!Number.isInteger(userID) || userID < 1) {
+      return res.status(400).json({ message: 'A valid admin user ID is required.' });
+    }
+
+    const user = await approvePendingAdminSignup(userID);
+    if (!user) {
+      return res.status(409).json({ message: 'Admin signup is already approved or does not exist.' });
+    }
+
+    res.status(200).json({ message: 'Admin signup approved successfully.', user });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -152,7 +160,7 @@ export const getUser = async (req, res) => {
 // Create new user — password is bcrypt-hashed before storage
 export const createNewUser = async (req, res) => {
   try {
-    const { name, phone, address, role = 'MEMBER', password, passHash, username } = req.body;
+    const { name, phone, address, password, passHash, username } = req.body;
     const normalizedName = typeof name === 'string' ? name.trim() : '';
     const normalizedEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     
@@ -175,7 +183,8 @@ export const createNewUser = async (req, res) => {
       email: normalizedEmail,
       phone: phone || null,
       address: address || null,
-      role: role || 'MEMBER',
+      role: req.body.role === 'ADMIN' ? 'ADMIN' : 'MEMBER',
+      isApproved: req.body.role !== 'ADMIN',
       password: hashedPassword,
       username: username || null,
     });

@@ -110,10 +110,12 @@ export const initializeDatabase = async () => {
         ALTER TABLE users
         ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN NOT NULL DEFAULT TRUE,
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;
+        ALTER TABLE users ALTER COLUMN "isApproved" SET DEFAULT TRUE;
         UPDATE users
         SET "isApproved" = TRUE,
             "approvedAt" = COALESCE("approvedAt", "createdAt")
-        WHERE "isApproved" IS DISTINCT FROM TRUE;
+        WHERE "isApproved" IS DISTINCT FROM TRUE
+          AND role IS DISTINCT FROM 'ADMIN';
       `);
       await pool.query(`
         ALTER TABLE users
