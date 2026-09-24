@@ -24,6 +24,8 @@ import {
   getLibraryReviewsByUserId,
   createLibraryReview,
   searchBooksByField,
+  getBookDetailsById,
+  getBookReviewsByBookId,
   getAdminSummary,
   getAdminBooks,
   getAdminBookReviews,
@@ -286,6 +288,36 @@ export const searchBooks = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+export const getBookDetails = async (req, res) => {
+  try {
+    const bookID = Number(req.params.id);
+    if (!Number.isInteger(bookID) || bookID < 1) {
+      return res.status(400).json({ message: "A valid book ID is required." });
+    }
+    const book = await getBookDetailsById(bookID);
+    if (!book) {
+      return res.status(404).json({ message: "Book not found" });
+    }
+    res.status(200).json(book);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getBookReviews = async (req, res) => {
+  try {
+    const bookID = Number(req.params.id);
+    if (!Number.isInteger(bookID) || bookID < 1) {
+      return res.status(400).json({ message: "A valid book ID is required." });
+    }
+    const reviews = await getBookReviewsByBookId(bookID);
+    res.status(200).json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 
 export const getBorrowRecordsByUser = async (req, res) => {
   try {

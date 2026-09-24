@@ -81,8 +81,6 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [newReviewData, setNewReviewData] = useState({ rating: 5, reportDetails: "" });
   const [reviewMsg, setReviewMsg] = useState("");
-  const [bookReviewTarget, setBookReviewTarget] = useState(null);
-  const [bookReviewDraft, setBookReviewDraft] = useState({ rating: 5, comment: "" });
   const [newBookReviewData, setNewBookReviewData] = useState({ bookID: "", rating: 5, comment: "" });
   const [bookReviewMsg, setBookReviewMsg] = useState("");
   const [selectedBook, setSelectedBook] = useState(null);
@@ -297,25 +295,6 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
-  const handleReviewBook = (book) => {
-    const hasBorrowedBook = borrowRecords.some(
-      (record) => String(record.bookID) === String(book.bookID)
-        && ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status)
-    );
-
-    if (window.location.pathname.startsWith("/book/")) {
-      window.history.pushState({ type: "home" }, "", "/");
-    }
-    setSelectedBook(null);
-    setSelectedBookId(null);
-    setHasSearched(false);
-    setBookReviewMsg(hasBorrowedBook ? "" : "Borrow this book before submitting a review.");
-    setNewBookReviewData((current) => ({
-      ...current,
-      bookID: hasBorrowedBook ? String(book.bookID) : "",
-    }));
-    setActiveSection("book_review");
-  };
 
   const handleBackFromBook = () => {
     if (window.history.length > 1) {
@@ -407,45 +386,29 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     setTimeout(() => setReviewMsg(""), 3000);
   };
 
-  const openBookReview = (bookID, title) => {
-    setBookReviewTarget({ bookID, title });
-    setBookReviewDraft({ rating: 5, comment: "" });
-    setReviewMsg("");
-  };
-
-  const submitBookReview = async (e) => {
-    e.preventDefault();
-    if (!bookReviewTarget || !bookReviewDraft.comment.trim()) return;
-    try {
-      const token = sessionStorage.getItem('library_token');
-      const response = await fetch(`/api/users/${user.userID}/book-reviews`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: 'Bearer ' + token } : {}),
-        },
-        body: JSON.stringify({
-          bookID: Number(bookReviewTarget.bookID),
-          rating: Number(bookReviewDraft.rating),
-          comment: bookReviewDraft.comment.trim(),
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to submit review.');
-      setBookReviews((current) => [{ ...data.review, book_name: bookReviewTarget.title }, ...current]);
-      setBookReviewTarget(null);
-      setReviewMsg('Book review submitted.');
-    } catch (error) {
-      setReviewMsg(error.message);
-    }
-  };
+  const bookOptions = Array.from(
+    new Map([
+      ...borrowRecords
+        .filter((record) => ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status))
+        .map((record) => [String(record.bookID), {
+          bookID: record.bookID,
+          bookName: record.bookName || `Book #${record.bookID}`,
+        }]),
+      ...orderInfo
+        .filter((order) => order.status === "APPROVED")
+        .map((order) => [String(order.book_id || order.bookID), {
+          bookID: order.book_id || order.bookID,
+          bookName: order.book_name || `Book #${order.book_id || order.bookID}`,
+        }]),
+    ]).values()
+  );
 
   const handleBookReviewSubmit = async (e) => {
     e.preventDefault();
     const comment = newBookReviewData.comment.trim();
 
     if (!newBookReviewData.bookID || !comment) {
-      setBookReviewMsg("Choose a borrowed book and write a review first.");
+      setBookReviewMsg("Choose a book and write a review first.");
       return;
     }
 
@@ -469,13 +432,29 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
         throw new Error(data.message || "Could not submit book review.");
       }
 
-      const book = borrowRecords.find(
-        (record) => String(record.bookID) === String(newBookReviewData.bookID)
+      const book = bookOptions.find(
+        (b) => String(b.bookID) === String(newBookReviewData.bookID)
       );
       setBookReviews((current) => [
         { ...data.review, book_name: book?.bookName || book?.bookID },
-        ...current,
+        ...current.filter((r) => String(r.reviewID) !== String(data.review?.reviewID)),
       ]);
+
+      if (data.review?.stats) {
+        setSelectedBook((current) =>
+          current && String(current.bookID) === String(newBookReviewData.bookID)
+            ? { ...current, ...data.review.stats }
+            : current
+        );
+        setBooks((current) =>
+          current.map((b) =>
+            String(b.bookID) === String(newBookReviewData.bookID)
+              ? { ...b, ...data.review.stats }
+              : b
+          )
+        );
+      }
+
       setNewBookReviewData({ bookID: "", rating: 5, comment: "" });
       setBookReviewMsg("Review submitted!");
     } catch (error) {
@@ -494,17 +473,6 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   ];
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
-  const hasReviewedBook = (bookID) => bookReviews.some((review) => String(review.book_id) === String(bookID));
-  const borrowedBookOptions = Array.from(
-    new Map(
-      borrowRecords
-        .filter((record) => ["BORROWED", "OVERDUE", "RETURNED", "LOST"].includes(record.status))
-        .map((record) => [String(record.bookID), {
-          bookID: record.bookID,
-          bookName: record.bookName || `Book #${record.bookID}`,
-        }])
-    ).values()
-  );
 
   return (
     <div className="lib-root">
@@ -685,8 +653,8 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                       className="form-control"
                       required
                     >
-                      <option value="">Choose a borrowed book</option>
-                      {borrowedBookOptions.map((book) => (
+                      <option value="">Choose a book</option>
+                      {bookOptions.map((book) => (
                         <option key={book.bookID} value={book.bookID}>{book.bookName}</option>
                       ))}
                     </select>
@@ -718,7 +686,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                       required
                     />
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={!borrowedBookOptions.length}>
+                  <button type="submit" className="btn btn-primary" disabled={!bookOptions.length}>
                     Submit Book Review
                   </button>
                 </form>
@@ -749,13 +717,12 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             {/* Orders */}
             {activeSection === "order_info" && (
               <div className="lib-table-wrap">
-                {bookReviewTarget && <BookReviewForm target={bookReviewTarget} draft={bookReviewDraft} setDraft={setBookReviewDraft} onSubmit={submitBookReview} onCancel={() => setBookReviewTarget(null)} message={reviewMsg} />}
-                {orderInfo.length === 0 ? (
+                                {orderInfo.length === 0 ? (
                   <div className="lib-empty">No orders found.</div>
                 ) : (
                   <table className="lib-table">
                     <thead>
-                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th><th>Review</th></tr>
+                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                       {orderInfo.map((o) => (
@@ -771,7 +738,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                               {o.status === "PENDING" ? "Pending Admin Approval" : o.status === "REJECTED" ? "Rejected" : "Approved"}
                             </span>
                           </td>
-                          <td>{o.status === "REJECTED" ? <span className="lib-review-pending">Order rejected</span> : o.status !== "APPROVED" ? <span className="lib-review-pending">Available after approval</span> : hasReviewedBook(o.book_id) ? <span className="lib-review-done">Reviewed</span> : <button type="button" className="lib-review-action" onClick={() => openBookReview(o.book_id, o.book_name)}>Review</button>}</td>
+                          
                         </tr>
                       ))}
                     </tbody>
@@ -949,7 +916,6 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             onBack={handleBackFromBook}
             onBorrow={handleBorrow}
             onOrder={handleOrder}
-            onReview={handleReviewBook}
             onAddToWishlist={handleAddToWishlist}
             wishlist={wishlist}
             borrowRecords={borrowRecords}

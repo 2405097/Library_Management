@@ -276,6 +276,100 @@ export const initializeDatabase = async () => {
         )
         WHERE "returnDate" IS NOT NULL;
       `);
+
+      // Ensure Functions, Stored Procedures, and Triggers for Book Ratings
+      await pool.query(`
+        -- Function: Calculate book average rating
+        CREATE OR REPLACE FUNCTION fn_calculate_book_avg_rating(p_book_id INT)
+        RETURNS NUMERIC(3, 2) AS $$
+        DECLARE
+          v_avg NUMERIC(3, 2);
+        BEGIN
+          SELECT COALESCE(ROUND(AVG(rating)::numeric, 2), 0.00)
+          INTO v_avg
+          FROM book_review
+          WHERE "bookID" = p_book_id;
+          RETURN v_avg;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Function: Real-time book rating and reading list statistics
+        CREATE OR REPLACE FUNCTION fn_get_book_rating_stats(
+          p_book_id INT,
+          OUT avg_rating NUMERIC(3, 2),
+          OUT total_ratings INT,
+          OUT want_to_read INT,
+          OUT currently_reading INT,
+          OUT have_read INT
+        ) AS $$
+        BEGIN
+          SELECT
+            fn_calculate_book_avg_rating(p_book_id),
+            (SELECT COUNT(*)::INT FROM book_review WHERE "bookID" = p_book_id),
+            (SELECT COUNT(*)::INT FROM wishlist WHERE "bookID" = p_book_id AND "listType" = 'WANT_TO_READ'),
+            (SELECT COUNT(*)::INT FROM wishlist WHERE "bookID" = p_book_id AND "listType" = 'CURRENTLY_READING'),
+            (SELECT (
+              (SELECT COUNT(DISTINCT "userID") FROM borrow_record WHERE "bookID" = p_book_id AND status = 'RETURNED') +
+              (SELECT COUNT(DISTINCT "userID") FROM "ORDER" WHERE "bookID" = p_book_id AND status = 'APPROVED') +
+              (SELECT COUNT(DISTINCT "userID") FROM wishlist WHERE "bookID" = p_book_id AND "listType" = 'FAVORITES')
+            )::INT)
+          INTO avg_rating, total_ratings, want_to_read, currently_reading, have_read;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Procedure: Update rating for a single book
+        CREATE OR REPLACE PROCEDURE sp_update_book_avg_rating(p_book_id INT)
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          UPDATE book
+          SET avg_rating = fn_calculate_book_avg_rating(p_book_id)
+          WHERE "bookID" = p_book_id;
+        END;
+        $$;
+
+        -- Procedure: Recalculate all book ratings in batch
+        CREATE OR REPLACE PROCEDURE sp_recalculate_all_ratings()
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          UPDATE book b
+          SET avg_rating = fn_calculate_book_avg_rating(b."bookID");
+        END;
+        $$;
+
+        -- Trigger Function: Calls procedure on insert, update, or delete
+        CREATE OR REPLACE FUNCTION trg_fn_update_book_rating()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          IF TG_OP = 'UPDATE' THEN
+            IF OLD."bookID" IS DISTINCT FROM NEW."bookID" THEN
+              CALL sp_update_book_avg_rating(OLD."bookID");
+            END IF;
+            CALL sp_update_book_avg_rating(NEW."bookID");
+            RETURN NEW;
+          ELSIF TG_OP = 'INSERT' THEN
+            CALL sp_update_book_avg_rating(NEW."bookID");
+            RETURN NEW;
+          ELSIF TG_OP = 'DELETE' THEN
+            CALL sp_update_book_avg_rating(OLD."bookID");
+            RETURN OLD;
+          END IF;
+          RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Trigger: book_review rating synchronization
+        DROP TRIGGER IF EXISTS trg_update_book_avg_rating ON book_review;
+        DROP TRIGGER IF EXISTS trg_book_review_rating_sync ON book_review;
+
+        CREATE TRIGGER trg_book_review_rating_sync
+        AFTER INSERT OR UPDATE OR DELETE ON book_review
+        FOR EACH ROW
+        EXECUTE FUNCTION trg_fn_update_book_rating();
+
+        -- Synchronize all book ratings
+        CALL sp_recalculate_all_ratings();
+      `);
+
       return;
     }
 

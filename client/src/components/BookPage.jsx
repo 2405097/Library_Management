@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
 import "./BookPage.css";
-import messageCircleIcon from "../assets/message-circle.svg";
 import iconBookOpen from "../assets/book-open.svg";
 import iconBookmarkCheck from "../assets/bookmark-check.svg";
 import iconStar from "../assets/star.svg";
@@ -17,20 +16,18 @@ export default function BookPage({
   onBack,
   onBorrow,
   onOrder,
-  onReview,
   onAddToWishlist,
   wishlist = [],
   borrowRecords = [],
   orders = [],
 }) {
   const [book, setBook] = useState(initialBook || null);
+  const [reviews, setReviews] = useState([]);
   const [olData, setOlData] = useState(null);
   const [synopsis, setSynopsis] = useState("");
   const [synopsisLoading, setSynopsisLoading] = useState(false);
   const [loadingBook, setLoadingBook] = useState(!initialBook);
   const [expandedDesc, setExpandedDesc] = useState(false);
-  const [userStars, setUserStars] = useState(0);
-  const [hoverStars, setHoverStars] = useState(0);
   const [activeTab, setActiveTab] = useState("overview");
   const [borrowing, setBorrowing] = useState(false);
   const [ordering, setOrdering] = useState(false);
@@ -59,38 +56,56 @@ export default function BookPage({
     (o) => String(o.bookID || o.book_id) === String(book?.bookID) && o.status === "PENDING"
   );
 
-  // ── 1. Fetch book from local backend if needed ───────────────────────────
+  // ── 1. Fetch fresh book details & user reviews from local database ────────
   useEffect(() => {
     let isMounted = true;
-
     if (!effectiveBookId) return;
-    if (book && String(book.bookID) === String(effectiveBookId)) return;
 
-    async function loadLocalBook() {
-      setLoadingBook(true);
+    async function loadLocalBookAndReviews() {
+      if (!initialBook) setLoadingBook(true);
       try {
         const token = sessionStorage.getItem("library_token");
         const headers = token ? { Authorization: "Bearer " + token } : {};
-        const res = await fetch(`/api/books/search?field=bookID&keyword=${effectiveBookId}`, { headers });
-        if (res.ok) {
-          const list = await res.json();
-          if (isMounted && Array.isArray(list) && list.length > 0) {
-            setBook(list[0]);
+        const [bookRes, reviewsRes] = await Promise.all([
+          fetch(`/api/books/${effectiveBookId}`, { headers }),
+          fetch(`/api/books/${effectiveBookId}/reviews`, { headers }),
+        ]);
+
+        if (bookRes.ok) {
+          const bookData = await bookRes.json();
+          if (isMounted && bookData) {
+            setBook((prev) => ({ ...(prev || {}), ...bookData }));
+          }
+        } else {
+          // Fallback search if /:id is not supported
+          const fallbackRes = await fetch(`/api/books/search?field=bookID&keyword=${effectiveBookId}`, { headers });
+          if (fallbackRes.ok) {
+            const list = await fallbackRes.json();
+            if (isMounted && Array.isArray(list) && list.length > 0) {
+              setBook((prev) => ({ ...(prev || {}), ...list[0] }));
+            }
+          }
+        }
+
+        if (reviewsRes.ok) {
+          const revList = await reviewsRes.json();
+          if (isMounted && Array.isArray(revList)) {
+            setReviews(revList);
           }
         }
       } catch (err) {
-        console.warn("Could not fetch book by ID from local backend:", err);
+        console.warn("Could not fetch book details or reviews from backend:", err);
       } finally {
         if (isMounted) setLoadingBook(false);
       }
     }
 
-    loadLocalBook();
+    loadLocalBookAndReviews();
 
     return () => {
       isMounted = false;
     };
-  }, [effectiveBookId, book]);
+  }, [effectiveBookId]);
 
   // ── 2. Fetch Open Library details & synopsis via OpenLibrary API only ─────
   useEffect(() => {
@@ -242,10 +257,19 @@ export default function BookPage({
   }
 
   const coverUrl = book.ISBN ? `https://covers.openlibrary.org/b/isbn/${book.ISBN}-L.jpg` : null;
+
+  // Real-time rating statistics from database
   const rawAvg = book.avgRating != null ? Number(book.avgRating) : 0.0;
   const ratingValue = rawAvg.toFixed(1);
+  const ratingCount = Number(book.ratingCount != null ? book.ratingCount : reviews.length);
+  const wantToReadCount = Number(book.wantToReadCount || 0);
+  const currentlyReadingCount = Number(book.currentlyReadingCount || 0);
+  const haveReadCount = Number(book.haveReadCount || 0);
+
+  // Rounded stars: ★★★★☆ based on average rating
   const roundedStars = Math.min(5, Math.max(0, Math.round(rawAvg)));
   const starsDisplay = "★".repeat(roundedStars) + "☆".repeat(5 - roundedStars);
+
   const publishYear = book.publicationYear || olData?.publish_date || "Unknown";
   const publisherName = book.publisher || (olData?.publishers && olData.publishers[0]?.name) || "Unknown Publisher";
   const pageCount = olData?.number_of_pages || "—";
@@ -313,7 +337,7 @@ export default function BookPage({
         {/* OpenLibrary Style Header Tabs */}
         <header className="bp-tabs-header">
           <ul className="bp-tabs-list" role="tablist">
-            {["overview", "view editions", "details", "reviews", "lists", "related books"].map((tab) => (
+            {["overview", "details", "reviews", "related books"].map((tab) => (
               <li key={tab}>
                 <button
                   type="button"
@@ -321,6 +345,7 @@ export default function BookPage({
                   onClick={() => setActiveTab(tab)}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === "reviews" && ratingCount > 0 ? ` (${ratingCount})` : ""}
                 </button>
               </li>
             ))}
@@ -361,7 +386,7 @@ export default function BookPage({
               </div>
             </div>
 
-            {/* Borrowing requires admin approval; return processing is admin-only. */}
+            {/* Borrow Button */}
             <div className="bp-borrow-group">
               <button
                 type="button"
@@ -389,6 +414,7 @@ export default function BookPage({
               </button>
             </div>
 
+            {/* Order Button */}
             <button
               type="button"
               className="bp-btn-list"
@@ -443,35 +469,6 @@ export default function BookPage({
               )}
             </div>
 
-            {/* Interactive Rating Stars */}
-            <div className="bp-rate-stars-wrapper" title="Rate this book">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  className={`bp-star-btn ${star <= (hoverStars || userStars) ? "active" : ""}`}
-                  onMouseEnter={() => setHoverStars(star)}
-                  onMouseLeave={() => setHoverStars(0)}
-                  onClick={() => setUserStars(star)}
-                  aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
-                >
-                  ★
-                </button>
-              ))}
-            </div>
-
-            {/* Action Row - Review Only with SVG Icon */}
-            <div className="bp-action-row">
-              <button
-                type="button"
-                className="bp-action-item"
-                onClick={() => onReview?.(book)}
-              >
-                <img src={messageCircleIcon} alt="" className="bp-action-icon-img" aria-hidden="true" />
-                <span>Review</span>
-              </button>
-            </div>
-
             {/* Sidebar Extra Information */}
             <div className="bp-sidebar-extra">
               <div className="bp-sidebar-meta-item">
@@ -505,166 +502,238 @@ export default function BookPage({
               </span>
             </div>
 
-            {/* Ratings & Stats Row */}
+            {/* Ratings & Stats Row: Reflects database user reviews and wishlist stats */}
             <div className="bp-ratings-summary">
-              <span className="bp-stars-display">{starsDisplay}</span>
+              <span className="bp-stars-display" title={`Average rating: ${ratingValue} out of 5 (${ratingCount} user ratings)`}>
+                {starsDisplay}
+              </span>
               <span className="bp-rating-score">{ratingValue}</span>
+              <span className="bp-rating-count">
+                ({ratingCount} {ratingCount === 1 ? "rating" : "ratings"})
+              </span>
+              <span className="bp-rating-divider">·</span>
+              <span className="bp-reading-stat">{wantToReadCount} Want to read</span>
+              <span className="bp-rating-divider">·</span>
+              <span className="bp-reading-stat">{currentlyReadingCount} Currently reading</span>
+              <span className="bp-rating-divider">·</span>
+              <span className="bp-reading-stat">{haveReadCount} Have read</span>
             </div>
 
-            {/* Synopsis Section */}
-            <section className="bp-synopsis-box" aria-label="Book synopsis">
-              <h4 className="bp-synopsis-headline">SYNOPSIS &amp; OVERVIEW</h4>
-              {synopsisLoading && !synopsis ? (
-                <p className="bp-synopsis-text" style={{ fontStyle: "italic", color: "#777" }}>
-                  Fetching book synopsis from Open Library…
-                </p>
-              ) : (
-                <>
-                  <p className={`bp-synopsis-text ${expandedDesc ? "" : "collapsed"}`}>
-                    {synopsis}
-                  </p>
-                  {synopsis.length > 200 && (
-                    <button
-                      type="button"
-                      className="bp-read-more-btn"
-                      onClick={() => setExpandedDesc((prev) => !prev)}
-                    >
-                      {expandedDesc ? "Read Less ⌃" : "Read More ⌄"}
-                    </button>
+            {/* Tab: Reviews */}
+            {activeTab === "reviews" ? (
+              <section className="bp-reviews-section">
+                <div className="bp-reviews-header">
+                  <div>
+                    <h3 className="bp-reviews-title">User Reviews &amp; Ratings</h3>
+                    <p className="bp-reviews-subtitle">
+                      Community ratings from Central Library members
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bp-reviews-stats-card">
+                  <div className="bp-big-score-box">
+                    <span className="bp-big-score">{ratingValue}</span>
+                    <span className="bp-big-stars">{starsDisplay}</span>
+                    <span className="bp-big-count">Based on {ratingCount} user {ratingCount === 1 ? "rating" : "ratings"}</span>
+                  </div>
+                </div>
+
+                {reviews.length === 0 ? (
+                  <div className="bp-empty-reviews">
+                    <p>No user reviews recorded for this book yet.</p>
+                    <p className="bp-sub-hint">Reviews and ratings can be submitted from your Member Dashboard once you borrow or purchase a copy.</p>
+                  </div>
+                ) : (
+                  <div className="bp-reviews-list">
+                    {reviews.map((rev) => (
+                      <div key={rev.reviewID} className="bp-review-card">
+                        <div className="bp-review-top">
+                          <div className="bp-reviewer-info">
+                            <span className="bp-reviewer-avatar">
+                              {(rev.user_name || "M").charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <strong className="bp-reviewer-name">{rev.user_name || `Member #${rev.user_id}`}</strong>
+                              <span className="bp-review-source-badge">
+                                {rev.reviewSource === "BOUGHT" ? "Purchased Copy" : "Borrowed Copy"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="bp-review-meta">
+                            <span className="bp-review-stars">
+                              {"★".repeat(rev.rating)}{"☆".repeat(5 - rev.rating)}
+                            </span>
+                            <span className="bp-review-date">
+                              {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString() : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="bp-review-comment">{rev.comment}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : (
+              /* Tab: Overview */
+              <>
+                {/* Synopsis Section */}
+                <section className="bp-synopsis-box" aria-label="Book synopsis">
+                  <h4 className="bp-synopsis-headline">SYNOPSIS &amp; OVERVIEW</h4>
+                  {synopsisLoading && !synopsis ? (
+                    <p className="bp-synopsis-text" style={{ fontStyle: "italic", color: "#777" }}>
+                      Fetching book synopsis from Open Library…
+                    </p>
+                  ) : (
+                    <>
+                      <p className={`bp-synopsis-text ${expandedDesc ? "" : "collapsed"}`}>
+                        {synopsis}
+                      </p>
+                      {synopsis.length > 200 && (
+                        <button
+                          type="button"
+                          className="bp-read-more-btn"
+                          onClick={() => setExpandedDesc((prev) => !prev)}
+                        >
+                          {expandedDesc ? "Read Less ⌃" : "Read More ⌄"}
+                        </button>
+                      )}
+                      <div className="bp-synopsis-source">
+                        Source: Open Library / Internet Archive Catalog
+                      </div>
+                    </>
                   )}
-                  <div className="bp-synopsis-source">
-                    Source: Open Library / Internet Archive Catalog
+                </section>
+
+                {/* 4-Box Overview Grid */}
+                <div className="bp-overview-grid">
+                  <div className="bp-overview-card">
+                    <span className="bp-oc-label">Publish Date</span>
+                    <span className="bp-oc-value">{publishYear}</span>
                   </div>
-                </>
-              )}
-            </section>
+                  <div className="bp-overview-card">
+                    <span className="bp-oc-label">Publisher</span>
+                    <span className="bp-oc-value is-link" title={publisherName}>
+                      {publisherName}
+                    </span>
+                  </div>
+                  <div className="bp-overview-card">
+                    <span className="bp-oc-label">Language</span>
+                    <span className="bp-oc-value">{languageName}</span>
+                  </div>
+                  <div className="bp-overview-card">
+                    <span className="bp-oc-label">Pages</span>
+                    <span className="bp-oc-value">{pageCount}</span>
+                  </div>
+                </div>
 
-            {/* 4-Box Overview Grid */}
-            <div className="bp-overview-grid">
-              <div className="bp-overview-card">
-                <span className="bp-oc-label">Publish Date</span>
-                <span className="bp-oc-value">{publishYear}</span>
-              </div>
-              <div className="bp-overview-card">
-                <span className="bp-oc-label">Publisher</span>
-                <span className="bp-oc-value is-link" title={publisherName}>
-                  {publisherName}
-                </span>
-              </div>
-              <div className="bp-overview-card">
-                <span className="bp-oc-label">Language</span>
-                <span className="bp-oc-value">{languageName}</span>
-              </div>
-              <div className="bp-overview-card">
-                <span className="bp-oc-label">Pages</span>
-                <span className="bp-oc-value">{pageCount}</span>
-              </div>
-            </div>
+                {/* Preview Availability */}
+                <div className="bp-preview-info">
+                  Previews available in: <span style={{ color: "#0066cc", fontWeight: 600 }}>English</span>
+                </div>
 
-            {/* Preview Availability */}
-            <div className="bp-preview-info">
-              Previews available in: <span style={{ color: "#0066cc", fontWeight: 600 }}>English</span>
-            </div>
+                {/* Tags & Classifications */}
+                <div className="bp-tags-container">
+                  {subjects.length > 0 && (
+                    <div className="bp-tag-row">
+                      <span className="bp-tag-title">SUBJECTS</span>
+                      <div className="bp-tag-list">
+                        {subjects.map((s, idx) => (
+                          <span key={idx} className="bp-tag-pill">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-            {/* Tags & Classifications */}
-            <div className="bp-tags-container">
-              {subjects.length > 0 && (
-                <div className="bp-tag-row">
-                  <span className="bp-tag-title">SUBJECTS</span>
-                  <div className="bp-tag-list">
-                    {subjects.map((s, idx) => (
-                      <span key={idx} className="bp-tag-pill">
-                        {s}
+                  {people.length > 0 && (
+                    <div className="bp-tag-row">
+                      <span className="bp-tag-title">PEOPLE</span>
+                      <div className="bp-tag-list">
+                        {people.map((p, idx) => (
+                          <span key={idx} className="bp-tag-pill">
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {places.length > 0 && (
+                    <div className="bp-tag-row">
+                      <span className="bp-tag-title">PLACES</span>
+                      <div className="bp-tag-list">
+                        {places.map((place, idx) => (
+                          <span key={idx} className="bp-tag-pill">
+                            {place}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {times.length > 0 && (
+                    <div className="bp-tag-row">
+                      <span className="bp-tag-title">TIMES</span>
+                      <div className="bp-tag-list">
+                        {times.map((t, idx) => (
+                          <span key={idx} className="bp-tag-pill">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Local Library Inventory Info Card */}
+                <div className="bp-local-inventory">
+                  <h4 className="bp-local-inventory-title">
+                     Central Library Availability &amp; Catalog
+                  </h4>
+                  <div className="bp-inventory-grid">
+                    <div className="bp-inv-item">
+                      <span>Status:</span>
+                      <span
+                        className={`bp-inv-badge ${
+                          (book.availableBorrowCopies ?? 1) > 0 ? "available" : "none"
+                        }`}
+                      >
+                        {(book.availableBorrowCopies ?? 1) > 0 ? "In Circulation" : "Unavailable"}
                       </span>
-                    ))}
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>Available Copies for Borrow:</span>
+                      <strong>{book.availableBorrowCopies ?? 0} / {book.totalCopies ?? 0}</strong>
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>Available Copies for Order:</span>
+                      <strong>{book.availableOrderCopies ?? 0}</strong>
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>Borrowed for:</span>
+                      <strong>{book.borrowCount ?? 0} times</strong>
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>Sold:</span>
+                      <strong>{book.soldCount ?? 0}</strong>
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>Edition:</span>
+                      <strong>{book.edition || "Standard"}</strong>
+                    </div>
+                    <div className="bp-inv-item">
+                      <span>ISBN:</span>
+                      <strong style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                        {book.ISBN || "N/A"}
+                      </strong>
+                    </div>
                   </div>
                 </div>
-              )}
-
-              {people.length > 0 && (
-                <div className="bp-tag-row">
-                  <span className="bp-tag-title">PEOPLE</span>
-                  <div className="bp-tag-list">
-                    {people.map((p, idx) => (
-                      <span key={idx} className="bp-tag-pill">
-                        {p}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {places.length > 0 && (
-                <div className="bp-tag-row">
-                  <span className="bp-tag-title">PLACES</span>
-                  <div className="bp-tag-list">
-                    {places.map((place, idx) => (
-                      <span key={idx} className="bp-tag-pill">
-                        {place}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {times.length > 0 && (
-                <div className="bp-tag-row">
-                  <span className="bp-tag-title">TIMES</span>
-                  <div className="bp-tag-list">
-                    {times.map((t, idx) => (
-                      <span key={idx} className="bp-tag-pill">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Local Library Inventory Info Card */}
-            <div className="bp-local-inventory">
-              <h4 className="bp-local-inventory-title">
-                 Central Library Availability &amp; Catalog
-              </h4>
-              <div className="bp-inventory-grid">
-                <div className="bp-inv-item">
-                  <span>Status:</span>
-                  <span
-                    className={`bp-inv-badge ${
-                      (book.availableBorrowCopies ?? 1) > 0 ? "available" : "none"
-                    }`}
-                  >
-                    {(book.availableBorrowCopies ?? 1) > 0 ? "In Circulation" : "Unavailable"}
-                  </span>
-                </div>
-                <div className="bp-inv-item">
-                  <span>Available Copies for Borrow:</span>
-                  <strong>{book.availableBorrowCopies ?? 0} / {book.totalCopies ?? 0}</strong>
-                </div>
-                <div className="bp-inv-item">
-                  <span>Available Copies for Order:</span>
-                  <strong>{book.availableOrderCopies ?? 0}</strong>
-                </div>
-                <div className="bp-inv-item">
-                  <span>Borrowed for:</span>
-                  <strong>{book.borrowCount ?? 0} times</strong>
-                </div>
-                <div className="bp-inv-item">
-                  <span>Sold:</span>
-                  <strong>{book.soldCount ?? 0}</strong>
-                </div>
-                <div className="bp-inv-item">
-                  <span>Edition:</span>
-                  <strong>{book.edition || "Standard"}</strong>
-                </div>
-                <div className="bp-inv-item">
-                  <span>ISBN:</span>
-                  <strong style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                    {book.ISBN || "N/A"}
-                  </strong>
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </main>
         </div>
       </div>

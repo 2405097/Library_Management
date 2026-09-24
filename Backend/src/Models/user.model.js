@@ -352,14 +352,17 @@ export const updateLastLogin = async (userID) => {
 // ── Book search ─────────────────────────────────────────────────────────────
 
 export const searchBooksByField = async (field, keyword) => {
-  const searchValue = `%${keyword}%`;
+  const isNumericField = field === "bookID" && !isNaN(Number(keyword));
+  const searchValue = isNumericField ? keyword.trim() : `%${keyword}%`;
   const values = [searchValue];
 
   let whereClause = "";
   if (field === "title") {
     whereClause = `AND LOWER(b.title) LIKE LOWER($1)`;
   } else if (field === "bookID") {
-    whereClause = `AND CAST(b."bookID" AS TEXT) LIKE $1`;
+    whereClause = isNumericField
+      ? `AND b."bookID" = $1::INT`
+      : `AND CAST(b."bookID" AS TEXT) LIKE $1`;
   } else if (field === "genre") {
     whereClause = `AND LOWER(b.genre) LIKE LOWER($1)`;
   } else if (field === "author") {
@@ -386,6 +389,14 @@ export const searchBooksByField = async (field, keyword) => {
       b."availableOrderCopies",
       (SELECT COUNT(*) FROM borrow_record br2 WHERE br2."bookID" = b."bookID" AND br2.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) AS borrow_count,
       (SELECT COALESCE(SUM(o2.quantity), 0) FROM "ORDER" o2 WHERE o2."bookID" = b."bookID" AND o2.status = 'APPROVED') AS sold_count,
+      (SELECT COUNT(*)::INT FROM book_review br WHERE br."bookID" = b."bookID") AS rating_count,
+      (SELECT COUNT(*)::INT FROM wishlist w WHERE w."bookID" = b."bookID" AND w."listType" = 'WANT_TO_READ') AS want_to_read_count,
+      (SELECT COUNT(*)::INT FROM wishlist w WHERE w."bookID" = b."bookID" AND w."listType" = 'CURRENTLY_READING') AS currently_reading_count,
+      (SELECT (
+        (SELECT COUNT(DISTINCT "userID") FROM borrow_record WHERE "bookID" = b."bookID" AND status = 'RETURNED') +
+        (SELECT COUNT(DISTINCT "userID") FROM "ORDER" WHERE "bookID" = b."bookID" AND status = 'APPROVED') +
+        (SELECT COUNT(DISTINCT "userID") FROM wishlist WHERE "bookID" = b."bookID" AND "listType" = 'FAVORITES')
+      )::INT) AS have_read_count,
       p."publisherName",
       STRING_AGG(DISTINCT a.name, ', ') AS author_name
     FROM book b
@@ -408,7 +419,11 @@ export const searchBooksByField = async (field, keyword) => {
     price: Number(book.price || 0),
     ISBN: book.ISBN,
     publicationYear: book.publicationYear,
-    avgRating: book.avg_rating != null ? Number(book.avg_rating) : null,
+    avgRating: book.avg_rating != null ? Number(book.avg_rating) : 0,
+    ratingCount: Number(book.rating_count || 0),
+    wantToReadCount: Number(book.want_to_read_count || 0),
+    currentlyReadingCount: Number(book.currently_reading_count || 0),
+    haveReadCount: Number(book.have_read_count || 0),
     language: book.language || "English",
     edition: book.edition,
     totalCopies: book.totalCopies,
@@ -417,6 +432,90 @@ export const searchBooksByField = async (field, keyword) => {
     borrowCount: Number(book.borrow_count || 0),
     soldCount: Number(book.sold_count || 0),
   }));
+};
+
+/**
+ * Retrieve full book details by ID including stats from PostgreSQL function fn_get_book_rating_stats
+ */
+export const getBookDetailsById = async (bookID) => {
+  const query = `
+    SELECT
+      b."bookID",
+      b.title,
+      b.genre,
+      b.price,
+      b."ISBN",
+      b."publicationYear",
+      b.avg_rating,
+      b.language,
+      b.edition,
+      b."totalCopies",
+      b."availableBorrowCopies",
+      b."availableOrderCopies",
+      (SELECT COUNT(*) FROM borrow_record br2 WHERE br2."bookID" = b."bookID" AND br2.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) AS borrow_count,
+      (SELECT COALESCE(SUM(o2.quantity), 0) FROM "ORDER" o2 WHERE o2."bookID" = b."bookID" AND o2.status = 'APPROVED') AS sold_count,
+      p."publisherName",
+      STRING_AGG(DISTINCT a.name, ', ') AS author_name,
+      stats.total_ratings AS rating_count,
+      stats.want_to_read AS want_to_read_count,
+      stats.currently_reading AS currently_reading_count,
+      stats.have_read AS have_read_count
+    FROM book b
+    LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
+    LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+    LEFT JOIN author a ON a."authorID" = ba."authorID"
+    LEFT JOIN LATERAL fn_get_book_rating_stats(b."bookID") stats ON TRUE
+    WHERE b."bookID" = $1
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies", p."publisherName", stats.total_ratings, stats.want_to_read, stats.currently_reading, stats.have_read;
+  `;
+  const { rows } = await pool.query(query, [bookID]);
+  if (!rows[0]) return null;
+  const book = rows[0];
+  return {
+    bookID: book.bookID,
+    title: book.title,
+    genre: book.genre,
+    authorName: book.author_name,
+    publisher: book.publisherName,
+    price: Number(book.price || 0),
+    ISBN: book.ISBN,
+    publicationYear: book.publicationYear,
+    avgRating: book.avg_rating != null ? Number(book.avg_rating) : 0,
+    ratingCount: Number(book.rating_count || 0),
+    wantToReadCount: Number(book.want_to_read_count || 0),
+    currentlyReadingCount: Number(book.currently_reading_count || 0),
+    haveReadCount: Number(book.have_read_count || 0),
+    language: book.language || "English",
+    edition: book.edition,
+    totalCopies: book.totalCopies,
+    availableBorrowCopies: book.availableBorrowCopies,
+    availableOrderCopies: book.availableOrderCopies,
+    borrowCount: Number(book.borrow_count || 0),
+    soldCount: Number(book.sold_count || 0),
+  };
+};
+
+/**
+ * Retrieve all reviews for a specific book
+ */
+export const getBookReviewsByBookId = async (bookID) => {
+  const query = `
+    SELECT
+      br."reviewID",
+      br.rating,
+      br.comment,
+      br."reviewSource",
+      br."createdAt",
+      br."userID" AS user_id,
+      u.name AS user_name,
+      u.avatar AS user_avatar
+    FROM book_review br
+    LEFT JOIN users u ON u."userID" = br."userID"
+    WHERE br."bookID" = $1
+    ORDER BY br."createdAt" DESC;
+  `;
+  const { rows } = await pool.query(query, [bookID]);
+  return rows;
 };
 
 // ── User data queries ────────────────────────────────────────────────────────
@@ -675,10 +774,30 @@ export const createBookReview = async (userID, bookID, rating, comment) => {
     INSERT INTO book_review ("userID", "bookID", rating, comment, "reviewSource")
     SELECT $1, $2, $3, $4, source
     FROM selected_source
+    ON CONFLICT ("userID", "bookID") DO UPDATE
+    SET rating = EXCLUDED.rating,
+        comment = EXCLUDED.comment,
+        "reviewSource" = EXCLUDED."reviewSource",
+        "createdAt" = CURRENT_TIMESTAMP
     RETURNING "reviewID", rating, comment, "createdAt", "bookID" AS book_id, "reviewSource";
   `;
   const { rows } = await pool.query(query, [userID, bookID, rating, comment]);
-  return rows[0] || null;
+  if (!rows[0]) return null;
+
+  // Retrieve fresh stats from PostgreSQL function
+  const statsRes = await pool.query(`SELECT * FROM fn_get_book_rating_stats($1)`, [bookID]);
+  const stats = statsRes.rows[0] || {};
+
+  return {
+    ...rows[0],
+    stats: {
+      avgRating: Number(stats.avg_rating || 0),
+      ratingCount: Number(stats.total_ratings || 0),
+      wantToReadCount: Number(stats.want_to_read || 0),
+      currentlyReadingCount: Number(stats.currently_reading || 0),
+      haveReadCount: Number(stats.have_read || 0),
+    },
+  };
 };
 
 export const getOrdersByUserId = async (userID) => {
