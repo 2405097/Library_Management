@@ -924,8 +924,8 @@ export const approveOrder = async (purchaseNo, discountPercentage = 0) => {
   const query = `
     UPDATE "ORDER"
     SET status = 'APPROVED',
-        "discountPercentage" = $2,
-        price = ROUND("actualPrice" * (1 - $2 / 100), 2),
+        "discountPercentage" = $2::numeric,
+        price = ROUND("actualPrice" * (1 - ($2::numeric / 100)), 2),
         "approvedAt" = CURRENT_TIMESTAMP
     WHERE "purchaseNo" = $1 AND status = 'PENDING'
     RETURNING "purchaseNo", "actualPrice", "discountPercentage", price, status, "approvedAt";

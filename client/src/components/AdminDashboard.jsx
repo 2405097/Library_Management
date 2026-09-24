@@ -14,6 +14,18 @@ const adminTabs = [
   { key: "feedback", label: "Feedback" },
 ];
 
+const BOOKS_PER_PAGE = 20;
+const BORROWS_PER_PAGE = 20;
+const ORDERS_PER_PAGE = 20;
+const DEFAULT_SUMMARY = {
+  total_users: 0,
+  total_books: 0,
+  active_borrow_records: 0,
+  pending_borrow_requests: 0,
+  total_orders: 0,
+  total_library_reviews: 0,
+};
+
 const formatDate = (val, fallback = "—") => {
   if (!val) return fallback;
   if (val instanceof Date) {
@@ -33,17 +45,13 @@ const formatDate = (val, fallback = "—") => {
 
 export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [activeTab, setActiveTab] = useState("admin_profile");
-  const [summary, setSummary] = useState({
-    total_users: 0,
-    total_books: 0,
-    active_borrow_records: 0,
-    pending_borrow_requests: 0,
-    total_orders: 0,
-    total_library_reviews: 0,
-  });
+  const [summary, setSummary] = useState(DEFAULT_SUMMARY);
   const [bookInfo, setBookInfo] = useState([]);
   const [borrowBookInfo, setBorrowBookInfo] = useState([]);
   const [orderedBookInfo, setOrderedBookInfo] = useState([]);
+  const [bookPage, setBookPage] = useState(0);
+  const [borrowPage, setBorrowPage] = useState(0);
+  const [orderPage, setOrderPage] = useState(0);
   const [bookReviews, setBookReviews] = useState([]);
   const [reviewFilter, setReviewFilter] = useState("ALL");
   const [feedback, setFeedback] = useState([]);
@@ -55,13 +63,26 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [resolvingFineID, setResolvingFineID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
   const [rejectingOrderID, setRejectingOrderID] = useState(null);
-  const [orderDiscounts, setOrderDiscounts] = useState({});
+  const [orderApprovalModal, setOrderApprovalModal] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
   const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [changeBook, setChangeBook] = useState(null);
   const [changeForm, setChangeForm] = useState({ borrowDelta: 0, orderDelta: 0, price: "" });
   const [savingBook, setSavingBook] = useState(false);
+
+  const updateBookInfo = (value) => {
+    setBookInfo(value);
+    setBookPage(0);
+  };
+  const updateBorrowBookInfo = (value) => {
+    setBorrowBookInfo(value);
+    setBorrowPage(0);
+  };
+  const updateOrderedBookInfo = (value) => {
+    setOrderedBookInfo(value);
+    setOrderPage(0);
+  };
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -79,7 +100,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           fetch('/api/users', { headers: authHeaders }),
         ]);
 
-        const summaryData = summaryRes.ok ? await summaryRes.json() : summary;
+        const summaryData = summaryRes.ok ? await summaryRes.json() : DEFAULT_SUMMARY;
         const booksData = booksRes.ok ? await booksRes.json() : [];
         const borrowData = borrowRes.ok ? await borrowRes.json() : [];
         const orderData = ordersRes.ok ? await ordersRes.json() : [];
@@ -88,26 +109,19 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         const usersData = usersRes.ok ? await usersRes.json() : [];
 
         setSummary(summaryData);
-        setBookInfo(booksData);
-        setBorrowBookInfo(borrowData);
-        setOrderedBookInfo(orderData);
+        updateBookInfo(booksData);
+        updateBorrowBookInfo(borrowData);
+        updateOrderedBookInfo(orderData);
         setBookReviews(reviewData);
         setFeedback(feedbackData);
         setMembers(usersData.filter((account) => account.role === "MEMBER"));
         setAdmins(usersData.filter((account) => account.role === "ADMIN"));
         setPendingSignups(usersData.filter((account) => account.isApproved === false));
       } catch {
-        setSummary({
-          total_users: 0,
-          total_books: 0,
-          active_borrow_records: 0,
-          pending_borrow_requests: 0,
-          total_orders: 0,
-          total_library_reviews: 0,
-        });
-        setBookInfo([]);
-        setBorrowBookInfo([]);
-        setOrderedBookInfo([]);
+        setSummary(DEFAULT_SUMMARY);
+        updateBookInfo([]);
+        updateBorrowBookInfo([]);
+        updateOrderedBookInfo([]);
         setMembers([]);
         setAdmins([]);
         setPendingSignups([]);
@@ -127,12 +141,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not process return.');
-      setBorrowBookInfo((current) => current.map((item) =>
+      updateBorrowBookInfo((current) => current.map((item) =>
         String(item.borrowid || item.borrowID) === String(borrowID)
           ? { ...item, ...data.record, status: data.record.status, returndate: data.record.returnDate, returnDate: data.record.returnDate, delayfee: data.record.delayFee, delayFee: data.record.delayFee }
           : item
       ));
-      setBookInfo((current) => current.map((item) =>
+      updateBookInfo((current) => current.map((item) =>
         String(item.bookid || item.bookID) === String(data.record.bookID)
           ? { ...item, availableBorrowCopies: Number(item.availableBorrowCopies ?? item.availableborrowcopies ?? 0) + 1 }
           : item
@@ -158,7 +172,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not resolve fine.');
-      setBorrowBookInfo((current) => current.map((item) => (
+      updateBorrowBookInfo((current) => current.map((item) => (
         String(item.borrowid || item.borrowID) === String(borrowID)
           ? { ...item, ...data.record, returndate: data.record.returnDate, returnDate: data.record.returnDate, fineActionAt: data.record.fineActionAt }
           : item
@@ -180,7 +194,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not approve borrow request.');
-      setBorrowBookInfo((current) => current.map((item) =>
+      updateBorrowBookInfo((current) => current.map((item) =>
         String(item.borrowid || item.borrowID) === String(borrowID)
           ? {
               ...item,
@@ -214,13 +228,13 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not reject borrow request.');
-      setBorrowBookInfo((current) => current.map((item) =>
+      updateBorrowBookInfo((current) => current.map((item) =>
         String(item.borrowid || item.borrowID) === String(borrowID)
           ? { ...item, status: data.record.status }
           : item
       ));
       if (data.record?.bookID) {
-        setBookInfo((current) => current.map((item) =>
+        updateBookInfo((current) => current.map((item) =>
           String(item.bookid || item.bookID) === String(data.record.bookID)
             ? { ...item, availableBorrowCopies: Number(item.availableBorrowCopies ?? item.availableborrowcopies ?? 0) + 1 }
             : item
@@ -233,27 +247,51 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
-  const approveOrder = async (purchaseNo) => {
+  const approveOrder = async (purchaseNo, discountPercentage = 0) => {
     setApprovingOrderID(purchaseNo);
     try {
       const token = sessionStorage.getItem('library_token');
       const response = await fetch(`/api/admin/orders/${purchaseNo}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-        body: JSON.stringify({ discountPercentage: Number(orderDiscounts[purchaseNo] || 0) }),
+        body: JSON.stringify({ discountPercentage: Number(discountPercentage || 0) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not approve order.');
-      setOrderedBookInfo((current) => current.map((item) =>
+      updateOrderedBookInfo((current) => current.map((item) =>
         String(item.purchaseno || item.purchaseNo) === String(purchaseNo)
           ? { ...item, ...data.order, status: data.order.status, approvedAt: data.order.approvedAt }
           : item
       ));
+      return true;
     } catch (error) {
       window.alert(error.message);
+      return false;
     } finally {
       setApprovingOrderID(null);
     }
+  };
+
+  const openOrderApproval = (item) => {
+    const purchaseNo = item.purchaseno ?? item.purchaseNo;
+    setOrderApprovalModal({
+      purchaseNo,
+      bookName: item.book_name || item.bookName || "N/A",
+      memberName: item.member_name || item.memberName || "N/A",
+      price: Number(item.actualprice ?? item.actualPrice ?? item.price ?? 0),
+      discount: Number(item.discountpercentage ?? item.discountPercentage ?? 0),
+    });
+  };
+
+  const confirmOrderApproval = async () => {
+    if (!orderApprovalModal) return;
+    const discount = Number(orderApprovalModal.discount);
+    if (!Number.isFinite(discount) || discount < 0 || discount > 50) {
+      window.alert('Discount must be between 0 and 50%.');
+      return;
+    }
+    const approved = await approveOrder(orderApprovalModal.purchaseNo, discount);
+    if (approved) setOrderApprovalModal(null);
   };
 
   const rejectOrder = async (purchaseNo) => {
@@ -266,13 +304,13 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not reject order.');
-      setOrderedBookInfo((current) => current.map((item) =>
+      updateOrderedBookInfo((current) => current.map((item) =>
         String(item.purchaseno || item.purchaseNo) === String(purchaseNo)
           ? { ...item, status: data.order.status }
           : item
       ));
       if (data.order?.bookID) {
-        setBookInfo((current) => current.map((item) =>
+        updateBookInfo((current) => current.map((item) =>
           String(item.bookid || item.bookID) === String(data.order.bookID)
             ? { ...item, availableOrderCopies: Number(item.availableOrderCopies ?? item.availableordercopies ?? 0) + Number(data.order.quantity || 1) }
             : item
@@ -331,7 +369,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this book.');
-      setBookInfo((current) => current.map((book) => (
+      updateBookInfo((current) => current.map((book) => (
         String(book.bookID || book.bookid) === String(changeBook.bookID || changeBook.bookid)
           ? { ...book, ...data.book }
           : book
@@ -364,6 +402,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const filteredBookReviews = reviewFilter === "ALL"
     ? bookReviews
     : bookReviews.filter((review) => review.reviewSource === reviewFilter);
+  const totalBookPages = Math.ceil(bookInfo.length / BOOKS_PER_PAGE);
+  const totalBorrowPages = Math.ceil(borrowBookInfo.length / BORROWS_PER_PAGE);
+  const totalOrderPages = Math.ceil(orderedBookInfo.length / ORDERS_PER_PAGE);
+  const paginatedBooks = bookInfo.slice(bookPage * BOOKS_PER_PAGE, (bookPage + 1) * BOOKS_PER_PAGE);
+  const paginatedBorrows = borrowBookInfo.slice(borrowPage * BORROWS_PER_PAGE, (borrowPage + 1) * BORROWS_PER_PAGE);
+  const paginatedOrders = orderedBookInfo.slice(orderPage * ORDERS_PER_PAGE, (orderPage + 1) * ORDERS_PER_PAGE);
 
   return (
     <div className="dashboard-wrapper">
@@ -513,7 +557,20 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "book_info" && (
           <div className="content-panel">
-            <h3>Book Info</h3>
+            <div className="section-heading-row">
+              <h3>Book Info</h3>
+              {totalBookPages > 1 && (
+                <div className="pagination-controls" aria-label="Book table pagination">
+                  <button type="button" disabled={bookPage === 0} onClick={() => setBookPage((page) => page - 1)}>
+                    ← Previous Page
+                  </button>
+                  <span>Page {bookPage + 1} of {totalBookPages}</span>
+                  <button type="button" disabled={bookPage >= totalBookPages - 1} onClick={() => setBookPage((page) => page + 1)}>
+                    Next Page →
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="table-wrap">
               <table className="admin-table admin-table-books">
                 <thead>
@@ -523,30 +580,22 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Genre</th>
                     <th>Author</th>
                     <th>Publisher</th>
-                    <th>Available Copies for Borrow</th>
-                    <th>Available Copies for Order</th>
-                    <th>Borrowed Times</th>
-                    <th>Sold</th>
                     <th>Price</th>
-                    <th>Change</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bookInfo.map((book) => (
+                  {paginatedBooks.map((book) => (
                     <tr key={book.bookid || book.bookID}>
                       <td>{book.bookid ?? book.bookID}</td>
                       <td>{book.title}</td>
                       <td>{book.genre || "N/A"}</td>
                       <td>{book.author_names || book.authorName || "N/A"}</td>
                       <td>{book.publishername || book.publisherName || "N/A"}</td>
-                      <td>{book.availableBorrowCopies ?? book.availableborrowcopies ?? 0} / {book.totalCopies ?? 0}</td>
-                      <td>{book.availableOrderCopies ?? book.availableordercopies ?? 0}</td>
-                      <td>{book.borrow_count ?? book.borrowCount ?? 0}</td>
-                      <td>{book.sold_count ?? book.soldCount ?? 0}</td>
                       <td style={{ whiteSpace: "nowrap" }}>TK {Number(book.price || 0).toFixed(0)}</td>
                       <td>
                         <button type="button" className="btn btn-primary small-btn" onClick={() => openBookChange(book)}>
-                          Change
+                          Edit
                         </button>
                       </td>
                     </tr>
@@ -561,14 +610,16 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel book-change-panel">
             <div className="section-heading-row">
               <div>
-                <h3>Change Book</h3>
+                <h3>Edit Book</h3>
                 <p className="book-change-subtitle">{changeBook.title} (Book ID: {changeBook.bookID || changeBook.bookid})</p>
               </div>
               <button type="button" className="btn btn-secondary small-btn" onClick={() => setActiveTab("book_info")}>Back to Book Info</button>
             </div>
             <div className="book-change-current">
-              <div><span>Borrow copies available</span><strong>{changeBook.availableBorrowCopies ?? 0} / {changeBook.totalCopies ?? 0}</strong></div>
-              <div><span>Order copies available</span><strong>{changeBook.availableOrderCopies ?? 0}</strong></div>
+              <div><span>Borrow copies available</span><strong>{changeBook.availableBorrowCopies ?? changeBook.availableborrowcopies ?? 0} / {changeBook.totalCopies ?? changeBook.totalcopies ?? 0}</strong></div>
+              <div><span>Order copies available</span><strong>{changeBook.availableOrderCopies ?? changeBook.availableordercopies ?? 0}</strong></div>
+              <div><span>Borrowed times</span><strong>{changeBook.borrow_count ?? changeBook.borrowCount ?? 0}</strong></div>
+              <div><span>Sold</span><strong>{changeBook.sold_count ?? changeBook.soldCount ?? 0}</strong></div>
               <div><span>Previous price</span><strong>TK {Number(changeBook.price || 0).toFixed(2)}</strong></div>
             </div>
             <form className="book-change-form" onSubmit={saveBookChange}>
@@ -593,13 +644,25 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "borrow_book_info" && (
           <div className="content-panel">
-            <h3>Borrow Book Info</h3>
+            <div className="section-heading-row">
+              <h3>Borrow Book Info</h3>
+              {totalBorrowPages > 1 && (
+                <div className="pagination-controls" aria-label="Borrow table pagination">
+                  <button type="button" disabled={borrowPage === 0} onClick={() => setBorrowPage((page) => page - 1)}>
+                    ← Previous Page
+                  </button>
+                  <span>Page {borrowPage + 1} of {totalBorrowPages}</span>
+                  <button type="button" disabled={borrowPage >= totalBorrowPages - 1} onClick={() => setBorrowPage((page) => page + 1)}>
+                    Next Page →
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="table-wrap">
               <table className="admin-table admin-table-borrows">
                 <thead>
                   <tr>
                     <th>Borrow ID</th>
-                    <th>Copy</th>
                     <th>Book</th>
                     <th>Member</th>
                     <th>Due Date</th>
@@ -610,10 +673,9 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {borrowBookInfo.map((item) => (
+                  {paginatedBorrows.map((item) => (
                     <tr key={item.borrowid || item.borrowID}>
                       <td>{item.borrowid ?? item.borrowID}</td>
-                      <td>{item.copyNumber ?? item.copynumber ?? "N/A"}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
                       <td>
@@ -701,7 +763,20 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "ordered_book_info" && (
           <div className="content-panel">
-            <h3>Ordered Book Info</h3>
+            <div className="section-heading-row">
+              <h3>Ordered Book Info</h3>
+              {totalOrderPages > 1 && (
+                <div className="pagination-controls" aria-label="Order table pagination">
+                  <button type="button" disabled={orderPage === 0} onClick={() => setOrderPage((page) => page - 1)}>
+                    ← Previous Page
+                  </button>
+                  <span>Page {orderPage + 1} of {totalOrderPages}</span>
+                  <button type="button" disabled={orderPage >= totalOrderPages - 1} onClick={() => setOrderPage((page) => page + 1)}>
+                    Next Page →
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="table-wrap">
               <table className="admin-table admin-table-orders">
                 <thead>
@@ -711,38 +786,20 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Member</th>
                     <th>Order Date</th>
                     <th>Quantity</th>
-                    <th>Actual Price</th>
-                    <th>Discount</th>
-                    <th>Price</th>
+                    <th>Sold Price</th>
                     <th>Publisher</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orderedBookInfo.map((item) => (
+                  {paginatedOrders.map((item) => (
                     <tr key={item.purchaseno || item.purchaseNo}>
                       <td>{item.purchaseno ?? item.purchaseNo}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
                       <td>{formatDate(item.orderedAt || item.ordered_at || item.orderdate || item.orderDate, "N/A")}</td>
                       <td>{item.quantity || 1}</td>
-                      <td>TK {Number(item.actualprice ?? item.actualPrice ?? item.price ?? 0).toFixed(0)}</td>
-                      <td>
-                        {(item.status || "PENDING").toUpperCase() === "PENDING" ? (
-                          <div className="discount-input-wrap">
-                            <input
-                              type="number"
-                              min="0"
-                              max="50"
-                              step="0.01"
-                              value={orderDiscounts[item.purchaseno || item.purchaseNo] ?? item.discountpercentage ?? item.discountPercentage ?? 0}
-                              onChange={(event) => setOrderDiscounts((current) => ({ ...current, [item.purchaseno || item.purchaseNo]: event.target.value }))}
-                              aria-label={`Discount for order ${item.purchaseno || item.purchaseNo}`}
-                            />%
-                          </div>
-                        ) : `${Number(item.discountpercentage ?? item.discountPercentage ?? 0).toFixed(2)}%`}
-                      </td>
-                      <td>TK {Number(item.price || 0).toFixed(0)}</td>
+                      <td>{(item.status || "PENDING").toUpperCase() === "APPROVED" ? `TK ${Number(item.price || 0).toFixed(0)}` : "N/A"}</td>
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>
                       <td>
                         {(item.status || "PENDING").toUpperCase() === "PENDING" ? (
@@ -752,7 +809,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                               className="btn btn-primary small-btn order-action-btn"
                               style={{ lineHeight: 1.2, textAlign: "center" }}
                               disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
-                              onClick={() => approveOrder(item.purchaseno || item.purchaseNo)}
+                              onClick={() => openOrderApproval(item)}
                             >
                               {approvingOrderID === (item.purchaseno || item.purchaseNo) ? "Approving..." : <>Approve<br />Order</>}
                             </button>
@@ -816,6 +873,43 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           </div>
         )}
       </div>
+      {orderApprovalModal && (
+        <div className="order-approve-overlay">
+          <div className="order-approve-modal" role="dialog" aria-modal="true" aria-labelledby="order-approve-title">
+            <h4 id="order-approve-title">Approve Order</h4>
+            <div className="modal-detail"><span>Book</span><strong>{orderApprovalModal.bookName}</strong></div>
+            <div className="modal-detail"><span>Member</span><strong>{orderApprovalModal.memberName}</strong></div>
+            <div className="modal-detail"><span>Original price</span><strong>TK {Number(orderApprovalModal.price || 0).toFixed(2)}</strong></div>
+            <label className="order-approval-field">
+              Discount (%)
+              <input
+                className="form-control"
+                type="number"
+                min="0"
+                max="50"
+                step="0.01"
+                value={orderApprovalModal.discount}
+                onChange={(event) => setOrderApprovalModal((current) => ({ ...current, discount: event.target.value }))}
+                autoFocus
+              />
+            </label>
+            <div className="modal-detail modal-price-after">
+              <span>Price after discount</span>
+              <strong>
+                TK {(Number(orderApprovalModal.price || 0) * (1 - Math.min(50, Math.max(0, Number(orderApprovalModal.discount) || 0)) / 100)).toFixed(2)}
+              </strong>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary small-btn" onClick={() => setOrderApprovalModal(null)} disabled={approvingOrderID !== null}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary small-btn" onClick={confirmOrderApproval} disabled={approvingOrderID === orderApprovalModal.purchaseNo}>
+                {approvingOrderID === orderApprovalModal.purchaseNo ? "Approving..." : "Confirm Approve"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <AccountDeletionDialog
         user={user}
         open={deleteDialogOpen}
