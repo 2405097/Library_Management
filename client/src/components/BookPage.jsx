@@ -575,6 +575,10 @@ export default function BookPage({
                   </div>
                 )}
               </section>
+            ) : activeTab === "related books" ? (
+              <section className="bp-related-section" style={{ padding: "48px 16px", textAlign: "center", color: "#777" }}>
+                <p>No related books to display.</p>
+              </section>
             ) : (
               /* Tab: Overview */
               <>
