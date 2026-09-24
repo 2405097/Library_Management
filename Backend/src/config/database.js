@@ -116,6 +116,11 @@ export const initializeDatabase = async () => {
         WHERE "isApproved" IS DISTINCT FROM TRUE;
       `);
       await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS avatar TEXT,
+        ADD COLUMN IF NOT EXISTS bio TEXT;
+      `);
+      await pool.query(`
         ALTER TABLE borrow_record
         ALTER COLUMN status TYPE VARCHAR(30),
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE;

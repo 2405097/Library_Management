@@ -14,6 +14,11 @@ const adminTabs = [
   { key: "feedback", label: "Feedback" },
 ];
 
+const sidebarTabs = [
+  { key: "admin_profile", label: "My Admin Info" },
+  ...adminTabs,
+];
+
 const BOOKS_PER_PAGE = 20;
 const BORROWS_PER_PAGE = 20;
 const ORDERS_PER_PAGE = 20;
@@ -63,6 +68,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [resolvingFineID, setResolvingFineID] = useState(null);
   const [approvingOrderID, setApprovingOrderID] = useState(null);
   const [rejectingOrderID, setRejectingOrderID] = useState(null);
+  const [openOrderActionID, setOpenOrderActionID] = useState(null);
   const [orderApprovalModal, setOrderApprovalModal] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
   const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
@@ -70,6 +76,17 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [changeBook, setChangeBook] = useState(null);
   const [changeForm, setChangeForm] = useState({ borrowDelta: 0, orderDelta: 0, price: "" });
   const [savingBook, setSavingBook] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
+  const [bioText, setBioText] = useState(user?.bio || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profileEmail, setProfileEmail] = useState(user?.email || "");
+  const [accountForm, setAccountForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+  });
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [savingAccount, setSavingAccount] = useState(false);
 
   const updateBookInfo = (value) => {
     setBookInfo(value);
@@ -82,6 +99,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const updateOrderedBookInfo = (value) => {
     setOrderedBookInfo(value);
     setOrderPage(0);
+    setOpenOrderActionID(null);
   };
 
   useEffect(() => {
@@ -130,6 +148,26 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
     fetchAdminData();
   }, []);
+
+  useEffect(() => {
+    if (openOrderActionID === null) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.order-action-menu')) {
+        setOpenOrderActionID(null);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setOpenOrderActionID(null);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openOrderActionID]);
 
   const processReturn = async (borrowID) => {
     setReturningBorrowID(borrowID);
@@ -384,10 +422,109 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({
+          avatar: avatarPreview,
+          bio: bioText,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not update profile.');
+
+      const storedUser = JSON.parse(sessionStorage.getItem('library_user') || '{}');
+      const updatedUser = { ...storedUser, ...data, name: profileName, email: profileEmail };
+      sessionStorage.setItem('library_user', JSON.stringify(updatedUser));
+      setAvatarPreview(data.avatar || null);
+      setBioText(data.bio || "");
+      window.alert('Profile updated successfully.');
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleAvatarUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      window.alert('Please select an image file.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      window.alert('Image must be smaller than 2 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const openAccountEditor = () => {
+    setAccountForm({ name: profileName, email: profileEmail });
+    setEditAccountOpen(true);
+  };
+
+  const saveAccount = async () => {
+    const name = accountForm.name.trim();
+    const email = accountForm.email.trim().toLowerCase();
+    if (!name || !email) {
+      window.alert('Name and email are required.');
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      window.alert('Please enter a valid email address.');
+      return;
+    }
+
+    setSavingAccount(true);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({ name, email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not update account.');
+
+      const storedUser = JSON.parse(sessionStorage.getItem('library_user') || '{}');
+      const updatedUser = { ...storedUser, ...data };
+      sessionStorage.setItem('library_user', JSON.stringify(updatedUser));
+      setProfileName(data.name || name);
+      setProfileEmail(data.email || email);
+      setAccountForm({ name: data.name || name, email: data.email || email });
+      setAdmins((current) => current.map((account) => (
+        String(account.userID) === String(user.userID) ? { ...account, ...data } : account
+      )));
+      setEditAccountOpen(false);
+      window.alert('Account updated successfully.');
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
   const adminInfo = [
     { label: "Admin ID", value: user?.userID ?? "N/A" },
-    { label: "Name", value: user?.name ?? "N/A" },
-    { label: "Email", value: user?.email ?? "N/A" },
+    { label: "Name", value: profileName || "N/A" },
+    { label: "Email", value: profileEmail || "N/A" },
     { label: "Role", value: user?.role ?? "ADMIN" },
   ];
 
@@ -408,46 +545,51 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const paginatedBooks = bookInfo.slice(bookPage * BOOKS_PER_PAGE, (bookPage + 1) * BOOKS_PER_PAGE);
   const paginatedBorrows = borrowBookInfo.slice(borrowPage * BORROWS_PER_PAGE, (borrowPage + 1) * BORROWS_PER_PAGE);
   const paginatedOrders = orderedBookInfo.slice(orderPage * ORDERS_PER_PAGE, (orderPage + 1) * ORDERS_PER_PAGE);
+  const sidebarActiveTab = activeTab === "change_book" ? "book_info" : activeTab;
 
   return (
-    <div className="dashboard-wrapper">
-      <div className="mainpage-card">
-        <div className="dashboard-header">
-          <div>
-            <h2>Welcome, {user.name}!</h2>
-            <p className="auth-subtitle">{user.email}</p>
-          </div>
-          <div className="dashboard-actions">
-            <button
-              type="button"
-              className={`admin-info-button ${activeTab === "admin_profile" ? "active" : ""}`}
-              onClick={() => setActiveTab("admin_profile")}
-              aria-label="Open my admin information"
-              title="My admin information"
-            >
+    <div className="admin-layout">
+      <aside className="admin-sidebar">
+        <div className="sidebar-profile">
+          <div className="sidebar-avatar">
+            {avatarPreview ? (
+              <img src={avatarPreview} alt={`${profileName || "Admin"} avatar`} />
+            ) : (
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="8" r="3.25" />
                 <path d="M5.5 20c.7-3.2 2.8-5 6.5-5s5.8 1.8 6.5 5" />
               </svg>
-            </button>
-            <button type="button" onClick={onLogout} className="btn btn-secondary small-btn">
-              Sign Out
-            </button>
+            )}
           </div>
+          <p className="sidebar-name">{profileName}</p>
+          <span className="sidebar-role">{user.role || "ADMIN"}</span>
         </div>
-
-        <div className="tab-buttons">
-          {adminTabs.map((tab) => (
+        <nav className="sidebar-nav" aria-label="Admin dashboard navigation">
+          {sidebarTabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
-              className={activeTab === tab.key ? "tab-button active" : "tab-button"}
+              className={sidebarActiveTab === tab.key ? "sidebar-nav-item active" : "sidebar-nav-item"}
               onClick={() => setActiveTab(tab.key)}
+              aria-current={sidebarActiveTab === tab.key ? "page" : undefined}
             >
               {tab.label}
             </button>
           ))}
+        </nav>
+        <div className="sidebar-footer">
+          <button type="button" onClick={onLogout} className="btn btn-secondary small-btn">
+            Sign Out
+          </button>
         </div>
+      </aside>
+
+      <main className="admin-main">
+        <header className="admin-topbar">
+          <h2>Welcome, {profileName}!</h2>
+          <p className="auth-subtitle">{profileEmail}</p>
+        </header>
+        <div className="admin-content">
 
         {activeTab === "member_info" && (
           <div className="content-panel">
@@ -478,19 +620,97 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         {activeTab === "admin_profile" && (
           <div className="content-panel">
             <h3>My Admin Information</h3>
-            <div className="info-grid">
-              {adminInfo.map((item) => (
-                <div key={item.label} className="info-card">
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
+            <div className="admin-profile-layout">
+              <div className="profile-avatar-section">
+                <div className="profile-avatar-large">
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Admin avatar" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="8" r="3.25" />
+                      <path d="M5.5 20c.7-3.2 2.8-5 6.5-5s5.8 1.8 6.5 5" />
+                    </svg>
+                  )}
                 </div>
-              ))}
+                <label className="btn btn-secondary small-btn avatar-upload-btn">
+                  Upload Photo
+                  <input type="file" accept="image/*" hidden onChange={handleAvatarUpload} />
+                </label>
+              </div>
+
+              <div className="info-grid">
+                {adminInfo.map((item) => (
+                  <div key={item.label} className="info-card">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div className="profile-bio-section">
+                <label>
+                  Bio
+                  <textarea
+                    className="form-control"
+                    rows={4}
+                    placeholder="Write a short bio..."
+                    value={bioText}
+                    onChange={(event) => setBioText(event.target.value)}
+                  />
+                </label>
+                <button type="button" className="btn btn-primary small-btn" onClick={saveProfile} disabled={savingProfile}>
+                  {savingProfile ? "Saving..." : "Save Profile"}
+                </button>
+              </div>
             </div>
-            <div className="account-danger-zone account-danger-button-only">
-              <button type="button" onClick={() => setDeleteDialogOpen(true)}>
-                Delete account
+            <div className="account-actions-row">
+              <button type="button" className="btn btn-secondary small-btn account-edit-trigger" onClick={openAccountEditor}>
+                Edit Account
               </button>
+              <div className="account-danger-zone account-danger-button-only">
+                <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                  Delete account
+                </button>
+              </div>
             </div>
+            {editAccountOpen && (
+              <div className="account-edit-panel">
+                <div className="account-edit-heading">
+                  <h4>Edit Account</h4>
+                  <p>Update the name and email used for your admin account.</p>
+                </div>
+                <div className="form-row account-edit-fields">
+                  <label className="form-group">
+                    Name
+                    <input
+                      className="form-control"
+                      type="text"
+                      value={accountForm.name}
+                      onChange={(event) => setAccountForm((current) => ({ ...current, name: event.target.value }))}
+                      autoComplete="name"
+                    />
+                  </label>
+                  <label className="form-group">
+                    Email
+                    <input
+                      className="form-control"
+                      type="email"
+                      value={accountForm.email}
+                      onChange={(event) => setAccountForm((current) => ({ ...current, email: event.target.value }))}
+                      autoComplete="email"
+                    />
+                  </label>
+                </div>
+                <div className="account-edit-actions">
+                  <button type="button" className="btn btn-secondary small-btn" onClick={() => setEditAccountOpen(false)} disabled={savingAccount}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn btn-primary small-btn" onClick={saveAccount} disabled={savingAccount}>
+                    {savingAccount ? "Saving..." : "Save Account"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -704,7 +924,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                               disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
                               onClick={() => approveBorrow(item.borrowid || item.borrowID)}
                             >
-                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : <>Approve<br />Borrow</>}
+                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : "Approve"}
                             </button>
                             <button
                               type="button"
@@ -737,11 +957,11 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                         ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) ? (
                           <button
                             type="button"
-                            className="btn btn-primary small-btn borrow-action-btn"
+                            className="btn btn-primary small-btn borrow-action-btn return-action-btn"
                             disabled={returningBorrowID === (item.borrowid || item.borrowID)}
                             onClick={() => processReturn(item.borrowid || item.borrowID)}
                           >
-                            {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : "Process Return"}
+                            {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : <>Process<br />Return</>}
                           </button>
                         ) : (
                           <span>
@@ -803,25 +1023,44 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.publisher_name || item.publisherName || "N/A"}</td>
                       <td>
                         {(item.status || "PENDING").toUpperCase() === "PENDING" ? (
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <div className="order-action-menu">
                             <button
                               type="button"
-                              className="btn btn-primary small-btn order-action-btn"
-                              style={{ lineHeight: 1.2, textAlign: "center" }}
+                              className="btn btn-secondary small-btn order-actions-trigger"
                               disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
-                              onClick={() => openOrderApproval(item)}
+                              onClick={() => setOpenOrderActionID((current) => current === (item.purchaseno || item.purchaseNo) ? null : (item.purchaseno || item.purchaseNo))}
+                              aria-haspopup="menu"
+                              aria-expanded={openOrderActionID === (item.purchaseno || item.purchaseNo)}
                             >
-                              {approvingOrderID === (item.purchaseno || item.purchaseNo) ? "Approving..." : <>Approve<br />Order</>}
+                              Actions <span className="order-actions-chevron" aria-hidden="true" />
                             </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary small-btn btn-danger-outline order-action-btn"
-                              style={{ lineHeight: 1.2, textAlign: "center" }}
-                              disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
-                              onClick={() => rejectOrder(item.purchaseno || item.purchaseNo)}
-                            >
-                              {rejectingOrderID === (item.purchaseno || item.purchaseNo) ? "Rejecting..." : <>Reject<br />Order</>}
-                            </button>
+                            {openOrderActionID === (item.purchaseno || item.purchaseNo) && (
+                              <div className="order-action-menu-list" role="menu">
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
+                                  onClick={() => {
+                                    setOpenOrderActionID(null);
+                                    openOrderApproval(item);
+                                  }}
+                                >
+                                  Approve Order
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="order-action-menu-danger"
+                                  disabled={approvingOrderID === (item.purchaseno || item.purchaseNo) || rejectingOrderID === (item.purchaseno || item.purchaseNo)}
+                                  onClick={() => {
+                                    setOpenOrderActionID(null);
+                                    rejectOrder(item.purchaseno || item.purchaseNo);
+                                  }}
+                                >
+                                  Reject Order
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className={`status-chip status-${(item.status || "").toLowerCase()}`}>
@@ -872,7 +1111,8 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </main>
       {orderApprovalModal && (
         <div className="order-approve-overlay">
           <div className="order-approve-modal" role="dialog" aria-modal="true" aria-labelledby="order-approve-title">

@@ -192,12 +192,31 @@ export const createNewUser = async (req, res) => {
 // Update user
 export const updateUserDetails = async (req, res) => {
   try {
-    const user = await updateUser(req.params.id, req.body);
+    const updatePayload = { ...req.body };
+    if (updatePayload.avatar !== undefined && req.user.role !== 'ADMIN') {
+      delete updatePayload.avatar;
+    }
+    if (updatePayload.name !== undefined) {
+      updatePayload.name = typeof updatePayload.name === 'string' ? updatePayload.name.trim() : '';
+      if (!updatePayload.name) {
+        return res.status(400).json({ message: 'Name cannot be empty' });
+      }
+    }
+    if (updatePayload.email !== undefined) {
+      updatePayload.email = typeof updatePayload.email === 'string' ? updatePayload.email.trim().toLowerCase() : '';
+      if (!updatePayload.email) {
+        return res.status(400).json({ message: 'Email cannot be empty' });
+      }
+    }
+    const user = await updateUser(req.params.id, updatePayload);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.status(200).json(user);
   } catch (error) {
+    if (error.code === '23505' && error.constraint === 'users_email_key') {
+      return res.status(409).json({ message: 'That email address is already in use.' });
+    }
     res.status(500).json({ message: error.message });
   }
 };

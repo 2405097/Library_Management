@@ -20,7 +20,7 @@ export const createUser = async ({
     const query = `
       INSERT INTO users (name, email, phone, address, role, "isApproved")
       VALUES ($1, $2, $3, $4, $5, FALSE)
-      RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt";
+      RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio;
     `;
     const values = [name, email, phone, address, role];
     const { rows } = await client.query(query, values);
@@ -54,7 +54,7 @@ export const createUser = async ({
  */
 export const findUserById = async (userID) => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio
     FROM users
     WHERE "userID" = $1;
   `;
@@ -67,7 +67,7 @@ export const findUserById = async (userID) => {
  */
 export const findUserByEmail = async (email) => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio
     FROM users
     WHERE email = $1;
   `;
@@ -80,7 +80,7 @@ export const findUserByEmail = async (email) => {
  */
 export const getAllUsers = async () => {
   const query = `
-    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt"
+    SELECT "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio
     FROM users
     ORDER BY "createdAt" DESC;
   `;
@@ -93,7 +93,7 @@ export const getAllUsers = async () => {
  */
 export const updateUser = async (
   userID,
-  { name, phone, address, role, password, passHash, username }
+  { name, email, phone, address, role, password, passHash, username, avatar, bio }
 ) => {
   const client = await pool.connect();
   try {
@@ -102,13 +102,16 @@ export const updateUser = async (
     const query = `
       UPDATE users
       SET name = COALESCE($1, name),
-          phone = COALESCE($2, phone),
-          address = COALESCE($3, address),
-          role = COALESCE($4, role)
-      WHERE "userID" = $5
-      RETURNING "userID", name, email, phone, address, role, "createdAt";
+          email = COALESCE($2, email),
+          phone = COALESCE($3, phone),
+          address = COALESCE($4, address),
+          role = COALESCE($5, role),
+          avatar = COALESCE($6, avatar),
+          bio = COALESCE($7, bio)
+      WHERE "userID" = $8
+      RETURNING "userID", name, email, phone, address, role, "createdAt", avatar, bio;
     `;
-    const values = [name, phone, address, role, userID];
+    const values = [name, email, phone, address, role, avatar, bio, userID];
     const { rows } = await client.query(query, values);
     const updatedUser = rows[0];
 
@@ -167,7 +170,7 @@ export const approveUser = async (userID) => {
     UPDATE users
     SET "isApproved" = TRUE, "approvedAt" = CURRENT_TIMESTAMP
     WHERE "userID" = $1 AND "isApproved" = FALSE
-    RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt";
+    RETURNING "userID", name, email, phone, address, role, "isApproved", "approvedAt", "createdAt", avatar, bio;
   `;
   const { rows } = await pool.query(query, [userID]);
   return rows[0] || null;
@@ -264,6 +267,8 @@ export const findUser = async (identifier) => {
       u."isApproved",
       u."approvedAt",
       u."createdAt",
+      u.avatar,
+      u.bio,
       c.username,
       c."passHash",
       c."lastLogin"
@@ -290,6 +295,8 @@ export const findUserWithCredentialsById = async (userID) => {
       u."isApproved",
       u."approvedAt",
       u."createdAt",
+      u.avatar,
+      u.bio,
       c.username,
       c."passHash",
       c."lastLogin"

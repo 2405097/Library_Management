@@ -4,6 +4,8 @@ CREATE TABLE USERS (
   email VARCHAR(255) UNIQUE NOT NULL,
   phone VARCHAR(20),
   address VARCHAR(255),
+  avatar TEXT,
+  bio TEXT,
   role VARCHAR(10) CHECK (role IN ('MEMBER', 'STAFF', 'ADMIN')),
   "isApproved" BOOLEAN NOT NULL DEFAULT FALSE,
   "approvedAt" TIMESTAMP WITH TIME ZONE,
