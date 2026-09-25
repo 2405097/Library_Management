@@ -420,6 +420,58 @@ export const initializeDatabase = async () => {
         END;
         $$;
 
+        -- Procedure: Multi-table workflow to process book return and restore inventory
+        CREATE OR REPLACE PROCEDURE sp_process_book_return(
+          p_borrow_id INT,
+          INOUT p_status VARCHAR DEFAULT NULL,
+          INOUT p_delay_fee NUMERIC DEFAULT NULL
+        )
+        LANGUAGE plpgsql AS $$
+        DECLARE
+          v_book_id INT;
+          v_borrow_date TIMESTAMPTZ;
+          v_fee NUMERIC(10, 2);
+          v_new_status VARCHAR(30);
+        BEGIN
+          -- 1. Find and lock the active borrow record
+          SELECT "bookID", "borrowDate"
+          INTO v_book_id, v_borrow_date
+          FROM borrow_record
+          WHERE "borrowID" = p_borrow_id AND status IN ('BORROWED', 'OVERDUE')
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+            p_status := NULL;
+            p_delay_fee := 0;
+            RETURN;
+          END IF;
+
+          -- 2. Calculate delay fee (20 Taka/day after 7 days)
+          v_fee := GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - v_borrow_date)) / 86400 - 7) * 20);
+          IF v_fee > 0 THEN
+            v_new_status := 'FINE_DUE';
+          ELSE
+            v_new_status := 'RETURNED';
+          END IF;
+
+          -- 3. Modify table 1: borrow_record
+          UPDATE borrow_record
+          SET "returnDate" = CURRENT_TIMESTAMP,
+              status = v_new_status,
+              "delayFee" = v_fee,
+              "fineActionAt" = NULL
+          WHERE "borrowID" = p_borrow_id;
+
+          -- 4. Modify table 2: book (restore available borrow copy)
+          UPDATE book
+          SET "availableBorrowCopies" = LEAST("totalCopies", "availableBorrowCopies" + 1)
+          WHERE "bookID" = v_book_id;
+
+          p_status := v_new_status;
+          p_delay_fee := v_fee;
+        END;
+        $$;
+
         -- Trigger Function: Calls procedure on insert, update, or delete
         CREATE OR REPLACE FUNCTION trg_fn_update_book_rating()
         RETURNS TRIGGER AS $$

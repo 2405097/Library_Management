@@ -717,33 +717,24 @@ export const returnBorrowedBook = async (borrowID) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const borrowResult = await client.query(
-      `UPDATE borrow_record
-      SET "returnDate" = CURRENT_TIMESTAMP,
-          status = CASE
-            WHEN GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20) > 0
-              THEN 'FINE_DUE'
-            ELSE 'RETURNED'
-          END,
-          "delayFee" = GREATEST(0, CEIL(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "borrowDate")) / 86400 - 7) * 20),
-          "fineActionAt" = NULL
-       WHERE "borrowID" = $1 AND status IN ('BORROWED', 'OVERDUE')
-      RETURNING "borrowID", "bookID", "returnDate", "delayFee", "fineActionAt", status`,
+    const procResult = await client.query(
+      `CALL sp_process_book_return($1, NULL, NULL)`,
       [borrowID]
     );
-    if (!borrowResult.rows[0]) {
+    const procOutput = procResult.rows[0];
+    if (!procOutput || !procOutput.p_status) {
       await client.query('ROLLBACK');
       return null;
     }
-
-    await client.query(
-      `UPDATE book
-      SET "availableBorrowCopies" = LEAST("totalCopies", "availableBorrowCopies" + 1)
-       WHERE "bookID" = $1`,
-      [borrowResult.rows[0].bookID]
-    );
     await client.query('COMMIT');
-    return borrowResult.rows[0];
+
+    const recordResult = await pool.query(
+      `SELECT "borrowID", "bookID", "returnDate", "delayFee", "fineActionAt", status
+       FROM borrow_record
+       WHERE "borrowID" = $1`,
+      [borrowID]
+    );
+    return recordResult.rows[0] || null;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
