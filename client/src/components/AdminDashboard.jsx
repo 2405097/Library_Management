@@ -1209,7 +1209,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                               ? "Rejected"
                               : ["RETURNED_WITH_FINE", "FINE_WAIVED"].includes((item.status || "").toUpperCase())
                                 ? formatDate(item.fineActionAt || item.fineactionat, "N/A")
-                                : (item.returndate || item.returnDate ? formatDate(item.returndate || item.returnDate) : "Returned")}
+                                : "Returned"}
                           </span>
                         )}
                       </td>
