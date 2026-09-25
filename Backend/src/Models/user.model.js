@@ -518,6 +518,33 @@ export const getBookReviewsByBookId = async (bookID) => {
   return rows;
 };
 
+/**
+ * Retrieve related books using PostgreSQL function fn_get_related_books
+ */
+export const getRelatedBooksByBookId = async (bookID, limit = 12) => {
+  const query = `
+    SELECT * FROM fn_get_related_books($1, $2);
+  `;
+  const { rows } = await pool.query(query, [bookID, limit]);
+  return rows.map((b) => ({
+    bookID: b.bookID,
+    title: b.title,
+    genre: b.genre,
+    authorName: b.author_name,
+    publisher: b.publisherName,
+    price: Number(b.price || 0),
+    ISBN: b.ISBN,
+    publicationYear: b.publicationYear,
+    avgRating: b.avg_rating != null ? Number(b.avg_rating) : 0,
+    language: b.language || "English",
+    edition: b.edition,
+    totalCopies: b.totalCopies,
+    availableBorrowCopies: b.availableBorrowCopies,
+    availableOrderCopies: b.availableOrderCopies,
+    matchScore: b.match_score,
+  }));
+};
+
 // ── User data queries ────────────────────────────────────────────────────────
 
 export const getBorrowRecordsByUserId = async (userID) => {

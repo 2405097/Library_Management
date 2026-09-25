@@ -1231,3 +1231,221 @@
   cursor: not-allowed;
 }
 
+/* ── Related Books Tab ── */
+.bp-related-section {
+  padding: 0.5rem 0 2rem;
+}
+
+.bp-related-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0ded9;
+}
+
+.bp-related-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #333333;
+  margin: 0 0 0.25rem;
+}
+
+.bp-related-subtitle {
+  font-size: 0.88rem;
+  color: #666666;
+  margin: 0;
+}
+
+.bp-related-empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: #777777;
+  background: #faf8f5;
+  border: 1px dashed #d5d1c8;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.bp-related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.25rem;
+}
+
+.bp-rel-card {
+  background: #ffffff;
+  border: 1px solid #e2ded5;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  user-select: none;
+}
+
+.bp-rel-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  border-color: #0066cc;
+}
+
+.bp-rel-card:focus-visible {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.bp-rel-skeleton {
+  min-height: 280px;
+  background: linear-gradient(90deg, #f0ece3 25%, #e6e0d4 50%, #f0ece3 75%);
+  background-size: 200% 100%;
+  animation: bp-skeleton-pulse 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@keyframes bp-skeleton-pulse {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.bp-rel-cover-wrap {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  position: relative;
+  overflow: hidden;
+  background-color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bp-rel-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.bp-rel-card:hover .bp-rel-cover-img {
+  transform: scale(1.04);
+}
+
+.bp-rel-fallback {
+  width: 100%;
+  height: 100%;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  color: #ffffff;
+}
+
+.bp-rel-fb-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 0.35rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bp-rel-fb-author {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bp-rel-info {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.bp-rel-genre-pill {
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f0ede6;
+  color: #666055;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.bp-rel-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #222222;
+  margin: 0;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bp-rel-author {
+  font-size: 0.8rem;
+  color: #666666;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bp-rel-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 0.45rem;
+}
+
+.bp-rel-rating {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #d97706;
+}
+
+.bp-rel-price {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.bp-rel-status-row {
+  margin-top: 0.25rem;
+}
+
+.bp-rel-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.bp-rel-badge.in-stock {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.bp-rel-badge.out-of-stock {
+  background: #ffebee;
+  color: #c62828;
+}
+

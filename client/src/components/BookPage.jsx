@@ -10,6 +10,13 @@ const WISHLIST_OPTIONS = [
   { key: "FAVORITES", label: "Favorites", icon: iconStar },
 ];
 
+function getCoverColor(str = "Book") {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 50%, 45%)`;
+}
+
 export default function BookPage({
   book: initialBook,
   bookId,
@@ -20,9 +27,12 @@ export default function BookPage({
   wishlist = [],
   borrowRecords = [],
   orders = [],
+  onSelectBook,
 }) {
   const [book, setBook] = useState(initialBook || null);
   const [reviews, setReviews] = useState([]);
+  const [relatedBooks, setRelatedBooks] = useState([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
   const [olData, setOlData] = useState(null);
   const [synopsis, setSynopsis] = useState("");
   const [synopsisLoading, setSynopsisLoading] = useState(false);
@@ -93,10 +103,23 @@ export default function BookPage({
             setReviews(revList);
           }
         }
+
+        // Fetch related books from local database (no external APIs)
+        setLoadingRelated(true);
+        const relRes = await fetch(`/api/books/${effectiveBookId}/related`);
+        if (relRes.ok) {
+          const relList = await relRes.json();
+          if (isMounted && Array.isArray(relList)) {
+            setRelatedBooks(relList);
+          }
+        }
       } catch (err) {
-        console.warn("Could not fetch book details or reviews from backend:", err);
+        console.warn("Could not fetch book details, reviews, or related books from backend:", err);
       } finally {
-        if (isMounted) setLoadingBook(false);
+        if (isMounted) {
+          setLoadingBook(false);
+          setLoadingRelated(false);
+        }
       }
     }
 
@@ -106,6 +129,16 @@ export default function BookPage({
       isMounted = false;
     };
   }, [effectiveBookId]);
+
+  const handleRelatedBookClick = (relBook) => {
+    if (onSelectBook) {
+      onSelectBook(relBook);
+    } else {
+      setBook(relBook);
+    }
+    setActiveTab("overview");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // ── 2. Fetch Open Library details & synopsis via OpenLibrary API only ─────
   useEffect(() => {
@@ -337,7 +370,7 @@ export default function BookPage({
         {/* OpenLibrary Style Header Tabs */}
         <header className="bp-tabs-header">
           <ul className="bp-tabs-list" role="tablist">
-            {["overview", "details", "reviews", "related books"].map((tab) => (
+            {["overview", "reviews", "related books"].map((tab) => (
               <li key={tab}>
                 <button
                   type="button"
@@ -576,8 +609,98 @@ export default function BookPage({
                 )}
               </section>
             ) : activeTab === "related books" ? (
-              <section className="bp-related-section" style={{ padding: "48px 16px", textAlign: "center", color: "#777" }}>
-                <p>No related books to display.</p>
+              <section className="bp-related-section">
+                <div className="bp-related-header">
+                  <div>
+                    <h3 className="bp-related-title">Related Books</h3>
+                    <p className="bp-related-subtitle">
+                      More books in {book.genre ? `"${book.genre}"` : "the library"}{book.authorName ? ` or by ${book.authorName}` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                {loadingRelated ? (
+                  <div className="bp-related-grid">
+                    {Array.from({ length: 4 }).map((_, idx) => (
+                      <div key={idx} className="bp-rel-card bp-rel-skeleton" />
+                    ))}
+                  </div>
+                ) : relatedBooks.length === 0 ? (
+                  <div className="bp-related-empty">
+                    <p>No related books found in the library catalog for this genre or author.</p>
+                  </div>
+                ) : (
+                  <div className="bp-related-grid">
+                    {relatedBooks.map((rel) => {
+                      const relCover = rel.ISBN
+                        ? `https://covers.openlibrary.org/b/isbn/${rel.ISBN}-M.jpg`
+                        : null;
+                      const relBg = getCoverColor(rel.title);
+                      return (
+                        <div
+                          key={rel.bookID}
+                          className="bp-rel-card"
+                          onClick={() => handleRelatedBookClick(rel)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleRelatedBookClick(rel);
+                            }
+                          }}
+                        >
+                          <div className="bp-rel-cover-wrap" style={{ backgroundColor: relBg }}>
+                            {relCover ? (
+                              <img
+                                src={relCover}
+                                alt={rel.title}
+                                className="bp-rel-cover-img"
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.target.style.display = "none";
+                                  if (e.target.nextElementSibling) {
+                                    e.target.nextElementSibling.style.display = "flex";
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className="bp-rel-fallback"
+                              style={{ display: relCover ? "none" : "flex", backgroundColor: relBg }}
+                            >
+                              <span className="bp-rel-fb-title">{rel.title}</span>
+                              <span className="bp-rel-fb-author">{rel.authorName || "Unknown"}</span>
+                            </div>
+                          </div>
+
+                          <div className="bp-rel-info">
+                            <span className="bp-rel-genre-pill">{rel.genre || "Book"}</span>
+                            <h4 className="bp-rel-title" title={rel.title}>{rel.title}</h4>
+                            <p className="bp-rel-author">by {rel.authorName || "Unknown Author"}</p>
+                            
+                            <div className="bp-rel-meta">
+                              <span className="bp-rel-rating">
+                                {rel.avgRating > 0 ? `★ ${Number(rel.avgRating).toFixed(1)}` : "☆ New"}
+                              </span>
+                              {rel.price > 0 && (
+                                <span className="bp-rel-price">TK {Number(rel.price).toFixed(0)}</span>
+                              )}
+                            </div>
+
+                            <div className="bp-rel-status-row">
+                              <span className={`bp-rel-badge ${Number(rel.availableBorrowCopies) > 0 ? "in-stock" : "out-of-stock"}`}>
+                                {Number(rel.availableBorrowCopies) > 0
+                                  ? `${rel.availableBorrowCopies} available`
+                                  : "Out of stock"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             ) : (
               /* Tab: Overview */

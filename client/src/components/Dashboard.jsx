@@ -920,6 +920,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             wishlist={wishlist}
             borrowRecords={borrowRecords}
             orders={orderInfo}
+            onSelectBook={handleSelectBook}
           />
         ) : !hasSearched ? (
           <div className="lib-hero">

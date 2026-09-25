@@ -317,6 +317,90 @@ export const initializeDatabase = async () => {
         END;
         $$ LANGUAGE plpgsql;
 
+        -- Function: Retrieve related books by matching genre and/or author
+        CREATE OR REPLACE FUNCTION fn_get_related_books(
+          p_book_id INT,
+          p_limit INT DEFAULT 12
+        )
+        RETURNS TABLE (
+          "bookID" INT,
+          title VARCHAR,
+          genre VARCHAR,
+          price NUMERIC,
+          "ISBN" VARCHAR,
+          "publicationYear" INT,
+          avg_rating NUMERIC,
+          language VARCHAR,
+          edition VARCHAR,
+          "totalCopies" INT,
+          "availableBorrowCopies" INT,
+          "availableOrderCopies" INT,
+          "publisherName" VARCHAR,
+          author_name TEXT,
+          match_score INT
+        ) AS $$
+        DECLARE
+          v_genre VARCHAR;
+        BEGIN
+          SELECT b.genre INTO v_genre FROM book b WHERE b."bookID" = p_book_id;
+
+          RETURN QUERY
+          WITH source_authors AS (
+            SELECT ba."authorID"
+            FROM book_author ba
+            WHERE ba."bookID" = p_book_id
+          ),
+          candidates AS (
+            SELECT
+              b."bookID",
+              b.title,
+              b.genre,
+              b.price,
+              b."ISBN",
+              b."publicationYear",
+              b.avg_rating,
+              b.language,
+              b.edition,
+              b."totalCopies",
+              b."availableBorrowCopies",
+              b."availableOrderCopies",
+              p."publisherName",
+              STRING_AGG(DISTINCT a.name, ', ') AS author_name,
+              (
+                (CASE WHEN COUNT(DISTINCT sa."authorID") > 0 THEN 2 ELSE 0 END) +
+                (CASE WHEN v_genre IS NOT NULL AND LOWER(b.genre) = LOWER(v_genre) THEN 1 ELSE 0 END)
+              )::INT AS match_score
+            FROM book b
+            LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
+            LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+            LEFT JOIN author a ON a."authorID" = ba."authorID"
+            LEFT JOIN source_authors sa ON sa."authorID" = ba."authorID"
+            WHERE b."bookID" != p_book_id
+            GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies", p."publisherName"
+          )
+          SELECT
+            c."bookID",
+            c.title,
+            c.genre,
+            c.price,
+            c."ISBN",
+            c."publicationYear",
+            c.avg_rating,
+            c.language,
+            c.edition,
+            c."totalCopies",
+            c."availableBorrowCopies",
+            c."availableOrderCopies",
+            c."publisherName",
+            c.author_name,
+            c.match_score
+          FROM candidates c
+          WHERE c.match_score > 0
+          ORDER BY c.match_score DESC, c.avg_rating DESC NULLS LAST, c.title ASC
+          LIMIT p_limit;
+        END;
+        $$ LANGUAGE plpgsql;
+
         -- Procedure: Update rating for a single book
         CREATE OR REPLACE PROCEDURE sp_update_book_avg_rating(p_book_id INT)
         LANGUAGE plpgsql AS $$

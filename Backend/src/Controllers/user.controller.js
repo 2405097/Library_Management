@@ -26,6 +26,7 @@ import {
   searchBooksByField,
   getBookDetailsById,
   getBookReviewsByBookId,
+  getRelatedBooksByBookId,
   getAdminSummary,
   getAdminBooks,
   getAdminBookReviews,
@@ -313,6 +314,20 @@ export const getBookReviews = async (req, res) => {
     }
     const reviews = await getBookReviewsByBookId(bookID);
     res.status(200).json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getRelatedBooks = async (req, res) => {
+  try {
+    const bookID = Number(req.params.id);
+    if (!Number.isInteger(bookID) || bookID < 1) {
+      return res.status(400).json({ message: "A valid book ID is required." });
+    }
+    const limit = Number(req.query.limit) || 12;
+    const relatedBooks = await getRelatedBooksByBookId(bookID, limit);
+    res.status(200).json(relatedBooks);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
