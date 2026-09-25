@@ -86,6 +86,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [returningBorrowID, setReturningBorrowID] = useState(null);
 
   const drawerRef = useRef(null);
 
@@ -207,6 +208,27 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
       ...current,
     ]);
     window.alert(`Borrow request placed for "${book.title}". Waiting for admin approval.`);
+  };
+
+  const handleRequestReturn = async (borrowID) => {
+    setReturningBorrowID(borrowID);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}/borrow-records/${borrowID}/return`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not request return.');
+      setBorrowRecords((current) => current.map((r) =>
+        r.borrowID === borrowID ? { ...r, ...data.record, returnRequested: true } : r
+      ));
+      window.alert("Return request submitted! An admin will process your return shortly.");
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setReturningBorrowID(null);
+    }
   };
 
   const handleOrder = async (book) => {
@@ -616,21 +638,61 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                     <thead>
                       <tr>
                         <th>ID</th><th>Book</th><th>Borrow Date</th>
-                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th>Status</th>
+                        <th>Due Date</th><th>Return Date</th><th>Delay Fee</th><th style={{ paddingLeft: "22px" }}>Status</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {borrowRecords.map((r) => (
-                        <tr key={r.borrowID}>
-                          <td>{r.borrowID}</td>
-                          <td>{r.bookName || r.bookID}</td>
-                          <td>{formatDate(r.borrowDate)}</td>
-                          <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
-                          <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
-                          <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
-                          <td><span className={`status-chip status-${(r.status || "").toLowerCase()}`}>{r.status === "PENDING" ? "Pending Admin Approval" : r.status === "FINE_DUE" ? "Fine due" : r.status === "RETURNED_WITH_FINE" ? "Returned with fine" : r.status === "FINE_WAIVED" ? "Fine waved" : r.status}</span></td>
-                        </tr>
-                      ))}
+                      {borrowRecords.map((r) => {
+                        const isApproved = ["BORROWED", "OVERDUE"].includes((r.status || "").toUpperCase());
+                        const hasRequestedReturn = Boolean(r.returnRequested || r.returnrequested);
+                        return (
+                          <tr key={r.borrowID}>
+                            <td>{r.borrowID}</td>
+                            <td>{r.bookName || r.bookID}</td>
+                            <td>{formatDate(r.borrowDate)}</td>
+                            <td>{r.status === "PENDING" ? "Upon approval" : formatDate(r.dueDate)}</td>
+                            <td>{r.returnDate ? formatDate(r.returnDate) : "—"}</td>
+                            <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
+                            <td>
+                              <span className={`status-chip status-${(r.status || "").toLowerCase()}`}>
+                                {r.status === "PENDING"
+                                  ? "Pending Admin Approval"
+                                  : r.status === "FINE_DUE"
+                                  ? "Fine due"
+                                  : r.status === "RETURNED_WITH_FINE"
+                                  ? "Returned with fine"
+                                  : r.status === "FINE_WAIVED"
+                                  ? "Fine waved"
+                                  : isApproved && hasRequestedReturn
+                                  ? "Return Requested"
+                                  : r.status}
+                              </span>
+                            </td>
+                            <td>
+                              {isApproved ? (
+                                hasRequestedReturn ? (
+                                  <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>
+                                    Return Requested
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="lib-primary-action"
+                                    style={{ padding: "4px 12px", fontSize: "0.82rem", cursor: "pointer" }}
+                                    onClick={() => handleRequestReturn(r.borrowID)}
+                                    disabled={returningBorrowID === r.borrowID}
+                                  >
+                                    {returningBorrowID === r.borrowID ? "Requesting..." : "Return"}
+                                  </button>
+                                )
+                              ) : (
+                                "N/A"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -722,7 +784,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                 ) : (
                   <table className="lib-table">
                     <thead>
-                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th>Status</th></tr>
+                      <tr><th>#</th><th>Book</th><th>Author</th><th>Publisher</th><th>Date</th><th>Price</th><th style={{ paddingLeft: "22px" }}>Status</th></tr>
                     </thead>
                     <tbody>
                       {orderInfo.map((o) => (

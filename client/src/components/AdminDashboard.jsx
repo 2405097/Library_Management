@@ -1,6 +1,33 @@
 import { useEffect, useState } from "react";
-import "./Login.css";
+import "./AdminDashboard.css";
 import AccountDeletionDialog from "./AccountDeletionDialog";
+
+const renderTabIcon = (key) => {
+  switch (key) {
+    case "admin_profile":
+      return <svg viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+    case "library_info":
+      return <svg viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1" /><rect width="7" height="5" x="14" y="3" rx="1" /><rect width="7" height="9" x="14" y="12" rx="1" /><rect width="7" height="5" x="3" y="16" rx="1" /></svg>;
+    case "book_info":
+      return <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>;
+    case "borrow_book_info":
+      return <svg viewBox="0 0 24 24"><path d="m16 6 4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" /></svg>;
+    case "ordered_book_info":
+      return <svg viewBox="0 0 24 24"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></svg>;
+    case "member_info":
+      return <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+    case "admin_info":
+      return <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" /></svg>;
+    case "admin_signup_approvals":
+      return <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" /><path d="m9 12 2 2 4-4" /></svg>;
+    case "book_reviews":
+      return <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>;
+    case "feedback":
+      return <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
+    default:
+      return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /></svg>;
+  }
+};
 
 const adminTabs = [
   { key: "member_info", label: "Member Info" },
@@ -475,10 +502,18 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     reader.readAsDataURL(file);
   };
 
-  const openAccountEditor = () => {
-    setAccountForm({ name: profileName, email: profileEmail });
-    setEditAccountOpen(true);
+  const toggleAccountEditor = () => {
+    if (!editAccountOpen) {
+      setAccountForm({ name: profileName, email: profileEmail });
+      setEditAccountOpen(true);
+      setTimeout(() => {
+        document.getElementById("account-edit-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    } else {
+      setEditAccountOpen(false);
+    }
   };
+  const openAccountEditor = toggleAccountEditor;
 
   const saveAccount = async () => {
     const name = accountForm.name.trim();
@@ -579,7 +614,21 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   return (
     <div className="admin-layout">
       <aside className="admin-sidebar">
-        <div className="sidebar-profile">
+        <div className="sidebar-brand-header">
+          <div className="brand-icon-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" />
+              <path d="M8 11h8" />
+              <path d="M8 7h6" />
+            </svg>
+          </div>
+          <div className="brand-text-col">
+            <div className="brand-main-title">Open Library 2.0</div>
+            <span className="brand-portal-tag">Admin Portal</span>
+          </div>
+        </div>
+
+        <div className="sidebar-profile" onClick={() => setActiveTab("admin_profile")} role="button" tabIndex={0} title="View My Admin Info">
           <div className="sidebar-avatar">
             {avatarPreview ? (
               <img src={avatarPreview} alt={`${profileName || "Admin"} avatar`} />
@@ -590,11 +639,17 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
               </svg>
             )}
           </div>
-          <p className="sidebar-name">{profileName}</p>
-          <span className="sidebar-role">{user.role || "ADMIN"}</span>
+          <div className="sidebar-profile-info">
+            <p className="sidebar-name">{profileName}</p>
+            <div className="sidebar-role-badge-row">
+              <span className="sidebar-role">{user.role || "ADMIN"}</span>
+              <span className="sidebar-user-id-tag">ID: {user?.userID ?? "—"}</span>
+            </div>
+          </div>
         </div>
+
         <nav className="sidebar-nav" aria-label="Admin dashboard navigation">
-          {sidebarTabs.map((tab) => (
+          {sidebarTabs.map((tab, idx) => (
             <button
               key={tab.key}
               type="button"
@@ -602,21 +657,36 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
               onClick={() => setActiveTab(tab.key)}
               aria-current={sidebarActiveTab === tab.key ? "page" : undefined}
             >
-              {tab.label}
+              <span className="nav-item-num">{String(idx + 1).padStart(2, "0")}</span>
+              {renderTabIcon(tab.key)}
+              <span className="nav-item-label">{tab.label}</span>
             </button>
           ))}
         </nav>
+
         <div className="sidebar-footer">
-          <button type="button" onClick={onLogout} className="btn btn-secondary small-btn">
-            Sign Out
+          <button type="button" onClick={onLogout} className="sidebar-signout-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
 
       <main className="admin-main">
         <header className="admin-topbar">
-          <h2>Welcome, {profileName}!</h2>
-          <p className="auth-subtitle">{profileEmail}</p>
+          <div className="topbar-header-info">
+            <div className="topbar-breadcrumb">
+              <span>OPEN LIBRARY 2.0</span>
+              <span>/</span>
+              <span>{(sidebarTabs.find((t) => t.key === sidebarActiveTab)?.label || "ADMIN").toUpperCase()}</span>
+            </div>
+            <h2>Welcome, {profileName}!</h2>
+            <p className="auth-subtitle">{profileEmail}</p>
+          </div>
         </header>
         <div className="admin-content">
 
@@ -648,85 +718,62 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "admin_profile" && (
           <div className="content-panel">
-            <h3>My Admin Information</h3>
-            <div className="admin-profile-layout">
-              <div className="profile-avatar-section">
-                <div className="profile-avatar-large">
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="Admin avatar" />
-                  ) : (
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <circle cx="12" cy="8" r="3.25" />
-                      <path d="M5.5 20c.7-3.2 2.8-5 6.5-5s5.8 1.8 6.5 5" />
-                    </svg>
-                  )}
-                </div>
-                <label className="btn btn-secondary small-btn avatar-upload-btn">
-                  Upload Photo
-                  <input type="file" accept="image/*" hidden onChange={handleAvatarUpload} />
-                </label>
+            <div className="section-heading-row profile-heading-row">
+              <div>
+                <h3>My Admin Information</h3>
+                <p className="profile-heading-subtitle">Manage your personal credentials, administrator role, and profile details</p>
               </div>
-
-              <div className="info-grid">
-                {adminInfo.map((item) => (
-                  <div key={item.label} className="info-card">
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                  </div>
-                ))}
-              </div>
-
-              <div className="profile-bio-section">
-                <label>
-                  Bio
-                  <textarea
-                    className="form-control"
-                    rows={4}
-                    placeholder="Write a short bio..."
-                    value={bioText}
-                    onChange={(event) => setBioText(event.target.value)}
-                  />
-                </label>
-                <button type="button" className="btn btn-primary small-btn" onClick={saveProfile} disabled={savingProfile}>
-                  {savingProfile ? "Saving..." : "Save Profile"}
-                </button>
-              </div>
-            </div>
-            <div className="account-actions-row">
-              <button type="button" className="btn btn-secondary small-btn account-edit-trigger" onClick={openAccountEditor}>
-                Edit Account
+              <button
+                type="button"
+                className={`account-edit-trigger ${editAccountOpen ? "active" : ""}`}
+                onClick={toggleAccountEditor}
+                aria-expanded={editAccountOpen}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>{editAccountOpen ? "Cancel Editing" : "Edit Account"}</span>
               </button>
-              <div className="account-danger-zone account-danger-button-only">
-                <button type="button" onClick={() => setDeleteDialogOpen(true)}>
-                  Delete account
-                </button>
-              </div>
             </div>
+
             {editAccountOpen && (
-              <div className="account-edit-panel">
+              <div className="account-edit-panel" id="account-edit-panel">
                 <div className="account-edit-heading">
-                  <h4>Edit Account</h4>
-                  <p>Update the name and email used for your admin account.</p>
+                  <div>
+                    <h4>Edit Account Credentials</h4>
+                    <p>Update the display name and email address used for this administrator account.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="account-edit-close-btn"
+                    onClick={() => setEditAccountOpen(false)}
+                    aria-label="Close edit account"
+                  >
+                    ✕
+                  </button>
                 </div>
                 <div className="form-row account-edit-fields">
                   <label className="form-group">
-                    Name
+                    Full Name
                     <input
                       className="form-control"
                       type="text"
                       value={accountForm.name}
                       onChange={(event) => setAccountForm((current) => ({ ...current, name: event.target.value }))}
                       autoComplete="name"
+                      placeholder="Administrator name"
                     />
                   </label>
                   <label className="form-group">
-                    Email
+                    Email Address
                     <input
                       className="form-control"
                       type="email"
                       value={accountForm.email}
                       onChange={(event) => setAccountForm((current) => ({ ...current, email: event.target.value }))}
                       autoComplete="email"
+                      placeholder="admin@example.com"
                     />
                   </label>
                 </div>
@@ -740,6 +787,81 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                 </div>
               </div>
             )}
+
+            <div className="admin-profile-layout">
+              {/* Left Column: Verified Admin Identity Card */}
+              <div className="profile-avatar-section">
+                <div className="profile-avatar-wrapper">
+                  <div className="profile-avatar-large">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="Admin avatar" />
+                    ) : (
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="8" r="3.25" />
+                        <path d="M5.5 20c.7-3.2 2.8-5 6.5-5s5.8 1.8 6.5 5" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <label className="avatar-upload-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  Upload Photo
+                  <input type="file" accept="image/*" hidden onChange={handleAvatarUpload} />
+                </label>
+                <div className="profile-id-name">{profileName}</div>
+                <div className="profile-id-email">{profileEmail}</div>
+                <div className="profile-id-badge">{user?.role || "ADMIN"}</div>
+              </div>
+
+              {/* Right Column: Information Tiles & Administrative Bio */}
+              <div className="profile-details-col">
+                <div className="info-grid">
+                  {adminInfo.map((item) => (
+                    <div key={item.label} className="info-card">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="profile-bio-section">
+                  <label>
+                    Administrative Bio
+                    <textarea
+                      rows={4}
+                      placeholder="Write a short summary about your administrative role..."
+                      value={bioText}
+                      onChange={(event) => setBioText(event.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="btn btn-primary small-btn" onClick={saveProfile} disabled={savingProfile}>
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="account-actions-row">
+              <button
+                type="button"
+                className={`account-edit-trigger ${editAccountOpen ? "active" : ""}`}
+                onClick={toggleAccountEditor}
+                aria-expanded={editAccountOpen}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>{editAccountOpen ? "Cancel Editing" : "Edit Account"}</span>
+              </button>
+              <div className="account-danger-zone account-danger-button-only">
+                <button type="button" onClick={() => setDeleteDialogOpen(true)}>
+                  Delete account
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -806,7 +928,51 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
 
         {activeTab === "library_info" && (
           <div className="content-panel">
-            <h3>Library Information</h3>
+            <h3>Library Information & System Overview</h3>
+            <div className="metrics-kpi-grid">
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">01</span>
+                </div>
+                <div className="kpi-value">{summary.total_books || 0}</div>
+                <div className="kpi-label">Books Available</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">02</span>
+                </div>
+                <div className="kpi-value">{summary.total_users || 0}</div>
+                <div className="kpi-label">Registered Members</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">03</span>
+                </div>
+                <div className="kpi-value">{summary.active_borrow_records || 0}</div>
+                <div className="kpi-label">Active Borrows</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">04</span>
+                </div>
+                <div className="kpi-value">{summary.pending_borrow_requests || 0}</div>
+                <div className="kpi-label">Pending Borrow Requests</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">05</span>
+                </div>
+                <div className="kpi-value">{summary.total_orders || 0}</div>
+                <div className="kpi-label">Total Book Orders</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-card-top">
+                  <span className="kpi-index">06</span>
+                </div>
+                <div className="kpi-value">{summary.total_library_reviews || 0}</div>
+                <div className="kpi-label">Patron Reviews</div>
+              </div>
+            </div>
             <div className="info-grid">
               {libraryInfo.map((item) => (
                 <div key={item.label} className="info-card">
@@ -976,6 +1142,8 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                             <>PENDING<br />APPROVAL</>
                           ) : (item.status || "").toUpperCase() === "FINE_DUE" ? (
                             "Fine due"
+                          ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) && Boolean(item.returnRequested || item.returnrequested) ? (
+                            <>RETURN<br />REQUESTED</>
                           ) : (item.status || "N/A")}
                         </span>
                       </td>
@@ -1021,14 +1189,20 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                             </button>
                           </div>
                         ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) ? (
-                          <button
-                            type="button"
-                            className="btn btn-primary small-btn borrow-action-btn return-action-btn"
-                            disabled={returningBorrowID === (item.borrowid || item.borrowID)}
-                            onClick={() => processReturn(item.borrowid || item.borrowID)}
-                          >
-                            {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : <>Process<br />Return</>}
-                          </button>
+                          Boolean(item.returnRequested || item.returnrequested) ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary small-btn borrow-action-btn return-action-btn"
+                              disabled={returningBorrowID === (item.borrowid || item.borrowID)}
+                              onClick={() => processReturn(item.borrowid || item.borrowID)}
+                            >
+                              {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : <>Process<br />Return</>}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>
+                              Awaiting Return
+                            </span>
+                          )
                         ) : (
                           <span>
                             {(item.status || "").toUpperCase() === "REJECTED"

@@ -17,6 +17,7 @@ import {
   approveBorrow,
   rejectBorrow,
   returnBorrowedBook,
+  requestBorrowReturn,
   resolveBorrowFine,
   getBookReviewsByUserId,
   createBookReview,
@@ -613,6 +614,23 @@ export const returnBookForAdmin = async (req, res) => {
       return res.status(409).json({ message: 'This borrow record has already been returned' });
     }
     res.status(200).json({ message: 'Book return processed successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const requestReturnForUser = async (req, res) => {
+  try {
+    const userID = req.params.id;
+    const borrowID = Number(req.params.borrowID);
+    if (!Number.isInteger(borrowID) || borrowID < 1) {
+      return res.status(400).json({ message: 'A valid borrow ID is required.' });
+    }
+    const record = await requestBorrowReturn(userID, borrowID);
+    if (!record) {
+      return res.status(404).json({ message: 'Borrow record not found or cannot be returned.' });
+    }
+    res.status(200).json({ message: 'Return requested successfully', record });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

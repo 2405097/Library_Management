@@ -559,6 +559,8 @@ export const getBorrowRecordsByUserId = async (userID) => {
       br."fineActionAt",
       br.status,
       br."approvedAt",
+      br."returnRequested",
+      br."returnRequestedAt",
       br."bookID",
       br."copyNumber",
       b.title AS "bookName"
@@ -735,6 +737,32 @@ export const returnBorrowedBook = async (borrowID) => {
       [borrowID]
     );
     return recordResult.rows[0] || null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const requestBorrowReturn = async (userID, borrowID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE borrow_record
+       SET "returnRequested" = TRUE,
+           "returnRequestedAt" = CURRENT_TIMESTAMP
+       WHERE "borrowID" = $1 AND "userID" = $2 AND status IN ('BORROWED', 'OVERDUE')
+       RETURNING "borrowID", "bookID", "borrowDate", "dueDate", "returnDate", "delayFee", "returnRequested", "returnRequestedAt", status`,
+      [borrowID, userID]
+    );
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    await client.query('COMMIT');
+    return result.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1023,6 +1051,8 @@ export const getAdminBorrowRecords = async () => {
       br."delayFee",
       br."fineActionAt",
       br."approvedAt",
+      br."returnRequested",
+      br."returnRequestedAt",
       br."bookID",
       br."copyNumber",
       COALESCE(u.name, 'Deleted user') AS member_name,

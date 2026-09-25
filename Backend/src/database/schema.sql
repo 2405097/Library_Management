@@ -78,6 +78,8 @@ CREATE TABLE BORROW_RECORD (
   status VARCHAR(30) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'FINE_DUE', 'RETURNED_WITH_FINE', 'FINE_WAIVED', 'OVERDUE', 'LOST', 'REJECTED')),
   "approvedAt" TIMESTAMP WITH TIME ZONE,
   "fineActionAt" TIMESTAMP WITH TIME ZONE,
+  "returnRequested" BOOLEAN NOT NULL DEFAULT FALSE,
+  "returnRequestedAt" TIMESTAMP WITH TIME ZONE,
   "copyNumber" INT CHECK ("copyNumber" > 0),
   "userID" INT REFERENCES USERS("userID") ON DELETE SET NULL,
   "bookID" INT NOT NULL REFERENCES BOOK("bookID") ON DELETE RESTRICT
@@ -314,7 +316,8 @@ BEGIN
   SET "returnDate" = CURRENT_TIMESTAMP,
       status = v_new_status,
       "delayFee" = v_fee,
-      "fineActionAt" = NULL
+      "fineActionAt" = NULL,
+      "returnRequested" = FALSE
   WHERE "borrowID" = p_borrow_id;
 
   -- 4. Modify table 2: book (restore available borrow copy)

@@ -79,6 +79,11 @@ export const initializeDatabase = async () => {
           CASE WHEN "returnDate" IS NULL THEN NULL ELSE "returnDate"::TIMESTAMP WITH TIME ZONE END;
       `);
       await pool.query(`
+        ALTER TABLE borrow_record
+        ADD COLUMN IF NOT EXISTS "returnRequested" BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "returnRequestedAt" TIMESTAMP WITH TIME ZONE;
+      `);
+      await pool.query(`
         ALTER TABLE "ORDER"
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
         ADD COLUMN IF NOT EXISTS "approvedAt" TIMESTAMP WITH TIME ZONE,
@@ -459,7 +464,8 @@ export const initializeDatabase = async () => {
           SET "returnDate" = CURRENT_TIMESTAMP,
               status = v_new_status,
               "delayFee" = v_fee,
-              "fineActionAt" = NULL
+              "fineActionAt" = NULL,
+              "returnRequested" = FALSE
           WHERE "borrowID" = p_borrow_id;
 
           -- 4. Modify table 2: book (restore available borrow copy)

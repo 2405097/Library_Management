@@ -9,6 +9,7 @@ import {
   logoutUser,
   getBorrowRecordsByUser,
   borrowBookForUser,
+  requestReturnForUser,
   getBookReviewsByUser,
   createBookReviewForUser,
   getOrdersByUser,
@@ -55,6 +56,9 @@ router.get('/:id/borrow-records', authenticate, authorizeSelfOrAdmin, getBorrowR
 // POST /api/users/:id/borrow - place a borrow request awaiting admin approval
 router.post('/:id/borrow', authenticate, authorizeSelfOrAdmin, borrowBookForUser);
 
+// POST /api/users/:id/borrow-records/:borrowID/return - user requests return of borrowed book
+router.post('/:id/borrow-records/:borrowID/return', authenticate, authorizeSelfOrAdmin, requestReturnForUser);
+
 // GET /api/users/:id/book-reviews
 router.get('/:id/book-reviews', authenticate, authorizeSelfOrAdmin, getBookReviewsByUser);
 
@@ -78,4 +82,3 @@ router.delete('/:id/wishlist/:bookID', authenticate, authorizeSelfOrAdmin, remov
 router.patch('/:id/wishlist/:bookID', authenticate, authorizeSelfOrAdmin, moveInWishlistForUser);
 
 export default router;
-
