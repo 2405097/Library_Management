@@ -57,6 +57,19 @@ const DEFAULT_SUMMARY = {
   total_orders: 0,
   total_library_reviews: 0,
 };
+const EMPTY_NEW_BOOK_FORM = {
+  title: "",
+  authors: "",
+  publisher: "",
+  genre: "",
+  ISBN: "",
+  edition: "",
+  publicationYear: "",
+  language: "English",
+  price: "",
+  borrowCopies: "1",
+  orderCopies: "1",
+};
 
 const formatDate = (val, fallback = "—") => {
   if (!val) return fallback;
@@ -106,6 +119,9 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [changeBook, setChangeBook] = useState(null);
   const [changeForm, setChangeForm] = useState({ borrowDelta: 0, orderDelta: 0, price: "" });
   const [savingBook, setSavingBook] = useState(false);
+  const [newBookForm, setNewBookForm] = useState(EMPTY_NEW_BOOK_FORM);
+  const [creatingBook, setCreatingBook] = useState(false);
+  const [createBookError, setCreateBookError] = useState("");
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
   const [bioText, setBioText] = useState(user?.bio || "");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -452,6 +468,43 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
+  const createBook = async (event) => {
+    event.preventDefault();
+    if (creatingBook) return;
+    setCreatingBook(true);
+    setCreateBookError("");
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch('/api/admin/books', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({
+          ...newBookForm,
+          price: Number(newBookForm.price),
+          borrowCopies: Number(newBookForm.borrowCopies),
+          orderCopies: Number(newBookForm.orderCopies),
+          publicationYear: newBookForm.publicationYear ? Number(newBookForm.publicationYear) : null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not add this book.');
+
+      updateBookInfo((current) => [data.book, ...current]);
+      setSummary((current) => ({ ...current, total_books: Number(current.total_books || 0) + 1 }));
+      setBookSearch("");
+      setNewBookForm(EMPTY_NEW_BOOK_FORM);
+      setActiveTab("book_info");
+      window.alert(`"${data.book.title}" was added to the catalog.`);
+    } catch (error) {
+      setCreateBookError(error.message);
+    } finally {
+      setCreatingBook(false);
+    }
+  };
+
   const saveProfile = async () => {
     setSavingProfile(true);
     try {
@@ -567,12 +620,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   ];
 
   const libraryInfo = [
-    { label: "Library Name", value: "Central Library" },
-    { label: "Branch", value: "Main Campus" },
-    { label: "Books Available", value: String(summary.total_books || 0) },
-    { label: "Members", value: String(summary.total_users || 0) },
-    { label: "Active Borrows", value: String(summary.active_borrow_records || 0) },
-    { label: "Pending Borrow Requests", value: String(summary.pending_borrow_requests || 0) },
+    { label: "Library Name", value: "Central Library", tab: "library_info" },
+    { label: "Branch", value: "Main Campus", tab: "library_info" },
+    { label: "Books Available", value: String(summary.total_books || 0), tab: "book_info" },
+    { label: "Members", value: String(summary.total_users || 0), tab: "member_info" },
+    { label: "Active Borrows", value: String(summary.active_borrow_records || 0), tab: "borrow_book_info" },
+    { label: "Pending Borrow Requests", value: String(summary.pending_borrow_requests || 0), tab: "borrow_book_info" },
   ];
   const filteredBookReviews = reviewFilter === "ALL"
     ? bookReviews
@@ -596,6 +649,10 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     item.bookName,
     item.bookid,
     item.bookID,
+    item.member_name,
+    item.memberName,
+    item.member_id,
+    item.memberID,
   ], borrowBookSearch));
   const filteredOrders = orderedBookInfo.filter((item) => matchesBookSearch([
     item.book_name,
@@ -609,7 +666,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const paginatedBooks = filteredBooks.slice(bookPage * BOOKS_PER_PAGE, (bookPage + 1) * BOOKS_PER_PAGE);
   const paginatedBorrows = filteredBorrows.slice(borrowPage * BORROWS_PER_PAGE, (borrowPage + 1) * BORROWS_PER_PAGE);
   const paginatedOrders = filteredOrders.slice(orderPage * ORDERS_PER_PAGE, (orderPage + 1) * ORDERS_PER_PAGE);
-  const sidebarActiveTab = activeTab === "change_book" ? "book_info" : activeTab;
+  const sidebarActiveTab = ["change_book", "add_book"].includes(activeTab) ? "book_info" : activeTab;
 
   return (
     <div className="admin-layout">
@@ -930,55 +987,61 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           <div className="content-panel">
             <h3>Library Information & System Overview</h3>
             <div className="metrics-kpi-grid">
-              <div className="kpi-card">
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Book Info" onClick={() => setActiveTab("book_info")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">01</span>
                 </div>
                 <div className="kpi-value">{summary.total_books || 0}</div>
                 <div className="kpi-label">Books Available</div>
-              </div>
-              <div className="kpi-card">
+              </button>
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Member Info" onClick={() => setActiveTab("member_info")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">02</span>
                 </div>
                 <div className="kpi-value">{summary.total_users || 0}</div>
                 <div className="kpi-label">Registered Members</div>
-              </div>
-              <div className="kpi-card">
+              </button>
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Borrow Book Info" onClick={() => setActiveTab("borrow_book_info")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">03</span>
                 </div>
                 <div className="kpi-value">{summary.active_borrow_records || 0}</div>
                 <div className="kpi-label">Active Borrows</div>
-              </div>
-              <div className="kpi-card">
+              </button>
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Borrow Book Info" onClick={() => setActiveTab("borrow_book_info")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">04</span>
                 </div>
                 <div className="kpi-value">{summary.pending_borrow_requests || 0}</div>
                 <div className="kpi-label">Pending Borrow Requests</div>
-              </div>
-              <div className="kpi-card">
+              </button>
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Ordered Book Info" onClick={() => setActiveTab("ordered_book_info")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">05</span>
                 </div>
                 <div className="kpi-value">{summary.total_orders || 0}</div>
                 <div className="kpi-label">Total Book Orders</div>
-              </div>
-              <div className="kpi-card">
+              </button>
+              <button type="button" className="kpi-card overview-navigation-card" aria-label="Open Feedback" onClick={() => setActiveTab("feedback")}>
                 <div className="kpi-card-top">
                   <span className="kpi-index">06</span>
                 </div>
                 <div className="kpi-value">{summary.total_library_reviews || 0}</div>
                 <div className="kpi-label">Patron Reviews</div>
-              </div>
+              </button>
             </div>
             <div className="info-grid">
               {libraryInfo.map((item) => (
-                <div key={item.label} className="info-card">
+                <button
+                  key={item.label}
+                  type="button"
+                  className="info-card overview-navigation-card"
+                  aria-label={`Open ${sidebarTabs.find((tab) => tab.key === item.tab)?.label || "Library Info"}`}
+                  onClick={() => setActiveTab(item.tab)}
+                >
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -987,7 +1050,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
         {activeTab === "book_info" && (
           <div className="content-panel">
             <div className="section-heading-row book-table-heading-row">
-              <h3>Book Info</h3>
+              <div className="book-info-heading">
+                <button type="button" className="btn btn-primary small-btn" onClick={() => { setCreateBookError(""); setActiveTab("add_book"); }}>
+                  + Add Book
+                </button>
+                <h3>Book Info</h3>
+              </div>
               <input
                 className="table-search-input"
                 type="search"
@@ -1047,6 +1115,71 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
           </div>
         )}
 
+        {activeTab === "add_book" && (
+          <div className="content-panel book-change-panel book-create-panel">
+            <div className="section-heading-row">
+              <div>
+                <h3>Add Book</h3>
+                <p className="book-change-subtitle">Enter the catalog details and initial inventory.</p>
+              </div>
+              <button type="button" className="btn btn-secondary small-btn" onClick={() => setActiveTab("book_info")}>
+                Back to Book Info
+              </button>
+            </div>
+            {createBookError && <p className="book-create-error" role="alert">{createBookError}</p>}
+            <form className="book-change-form book-create-form" onSubmit={createBook}>
+              <label className="book-form-full">
+                Title
+                <input type="text" maxLength="255" value={newBookForm.title} onChange={(event) => setNewBookForm((current) => ({ ...current, title: event.target.value }))} required />
+              </label>
+              <label>
+                Author(s)
+                <input type="text" maxLength="1000" placeholder="Author names, separated by commas" value={newBookForm.authors} onChange={(event) => setNewBookForm((current) => ({ ...current, authors: event.target.value }))} required />
+              </label>
+              <label>
+                Publisher
+                <input type="text" maxLength="255" value={newBookForm.publisher} onChange={(event) => setNewBookForm((current) => ({ ...current, publisher: event.target.value }))} />
+              </label>
+              <label>
+                Genre
+                <input type="text" maxLength="100" value={newBookForm.genre} onChange={(event) => setNewBookForm((current) => ({ ...current, genre: event.target.value }))} />
+              </label>
+              <label>
+                ISBN
+                <input type="text" maxLength="20" value={newBookForm.ISBN} onChange={(event) => setNewBookForm((current) => ({ ...current, ISBN: event.target.value }))} />
+              </label>
+              <label>
+                Edition
+                <input type="text" maxLength="50" value={newBookForm.edition} onChange={(event) => setNewBookForm((current) => ({ ...current, edition: event.target.value }))} />
+              </label>
+              <label>
+                Publication Year
+                <input type="number" min="0" max="9999" step="1" value={newBookForm.publicationYear} onChange={(event) => setNewBookForm((current) => ({ ...current, publicationYear: event.target.value }))} />
+              </label>
+              <label>
+                Language
+                <input type="text" maxLength="50" value={newBookForm.language} onChange={(event) => setNewBookForm((current) => ({ ...current, language: event.target.value }))} />
+              </label>
+              <label>
+                Price (TK)
+                <input type="number" min="0" step="0.01" value={newBookForm.price} onChange={(event) => setNewBookForm((current) => ({ ...current, price: event.target.value }))} required />
+              </label>
+              <label>
+                Borrow Copies
+                <input type="number" min="0" step="1" value={newBookForm.borrowCopies} onChange={(event) => setNewBookForm((current) => ({ ...current, borrowCopies: event.target.value }))} required />
+              </label>
+              <label>
+                Order Copies
+                <input type="number" min="0" step="1" value={newBookForm.orderCopies} onChange={(event) => setNewBookForm((current) => ({ ...current, orderCopies: event.target.value }))} required />
+              </label>
+              <div className="book-form-actions book-form-full">
+                <button type="button" className="btn btn-secondary" onClick={() => setActiveTab("book_info")} disabled={creatingBook}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={creatingBook}>{creatingBook ? "Adding Book..." : "Add Book"}</button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {activeTab === "change_book" && changeBook && (
           <div className="content-panel book-change-panel">
             <div className="section-heading-row">
@@ -1090,8 +1223,8 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
               <input
                 className="table-search-input"
                 type="search"
-                aria-label="Search borrowed books by title or book ID"
-                placeholder="Search books..."
+                aria-label="Search borrowed books by title, book ID, member name, or member ID"
+                placeholder="Search books or members..."
                 value={borrowBookSearch}
                 onChange={(event) => {
                   setBorrowBookSearch(event.target.value);
@@ -1115,6 +1248,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                 <thead>
                   <tr>
                     <th>Borrow ID</th>
+                    <th>Copy</th>
                     <th>Book</th>
                     <th>Member</th>
                     <th>Due Date</th>
@@ -1128,6 +1262,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   {paginatedBorrows.map((item) => (
                     <tr key={item.borrowid || item.borrowID}>
                       <td>{item.borrowid ?? item.borrowID}</td>
+                      <td>{item.copyNumber ?? item.copynumber ?? "N/A"}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
                       <td>
@@ -1140,6 +1275,8 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                         <span className={`status-chip status-${(item.status || "").toLowerCase()}`}>
                           {(item.status || "").toUpperCase() === "PENDING" ? (
                             <>PENDING<br />APPROVAL</>
+                          ) : (item.status || "").toUpperCase() === "WAITLISTED" ? (
+                            <>WAITING<br />FOR COPY</>
                           ) : (item.status || "").toUpperCase() === "FINE_DUE" ? (
                             "Fine due"
                           ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) && Boolean(item.returnRequested || item.returnrequested) ? (
@@ -1149,7 +1286,11 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       </td>
                       <td>TK {Number(item.delayfee || item.delayFee || 0).toFixed(0)}</td>
                       <td>
-                        {(item.status || "").toUpperCase() === "PENDING" ? (
+                        {(item.status || "").toUpperCase() === "WAITLISTED" ? (
+                          <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>
+                            Awaiting member request
+                          </span>
+                        ) : (item.status || "").toUpperCase() === "PENDING" ? (
                           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                             <button
                               type="button"

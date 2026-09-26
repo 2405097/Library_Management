@@ -533,6 +533,33 @@
   font-style: italic;
 }
 
+.lib-browse-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0 0 28px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lib-browse-toolbar select,
+.lib-sort-control select {
+  border: 1px solid var(--border-warm);
+  border-radius: 5px;
+  padding: 9px 30px 9px 10px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  font: inherit;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
 .lib-hero-divider {
   display: flex;
   align-items: center;
@@ -603,6 +630,10 @@
 }
 
 .lib-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   margin-bottom: 24px;
   padding-bottom: 10px;
   border-bottom: 1.5px solid var(--border-warm);
@@ -614,6 +645,18 @@
   font-family: var(--font-display);
   font-style: italic;
   color: var(--text-primary);
+}
+
+.lib-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .lib-book-grid {
@@ -715,6 +758,22 @@
   font-weight: 700;
   color: var(--accent-blue);
   margin: 0;
+}
+
+@media (max-width: 620px) {
+  .lib-browse-toolbar,
+  .lib-results-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lib-browse-toolbar {
+    align-items: flex-end;
+  }
+
+  .lib-sort-control {
+    justify-content: space-between;
+  }
 }
 
 .form-group {

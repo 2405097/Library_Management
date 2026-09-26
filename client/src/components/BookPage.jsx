@@ -22,6 +22,7 @@ export default function BookPage({
   bookId,
   onBack,
   onBorrow,
+  onJoinBorrowList,
   onOrder,
   onAddToWishlist,
   wishlist = [],
@@ -40,6 +41,7 @@ export default function BookPage({
   const [expandedDesc, setExpandedDesc] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [borrowing, setBorrowing] = useState(false);
+  const [joiningBorrowList, setJoiningBorrowList] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const [addingToList, setAddingToList] = useState(false);
   const [showListPicker, setShowListPicker] = useState(false);
@@ -58,6 +60,9 @@ export default function BookPage({
 
   const pendingBorrow = (borrowRecords || []).find(
     (r) => String(r.bookID || r.book_id) === String(book?.bookID) && r.status === "PENDING"
+  );
+  const waitlistedBorrow = (borrowRecords || []).find(
+    (r) => String(r.bookID || r.book_id) === String(book?.bookID) && r.status === "WAITLISTED"
   );
   const activeBorrow = (borrowRecords || []).find(
     (r) => String(r.bookID || r.book_id) === String(book?.bookID) && ["BORROWED", "OVERDUE"].includes(r.status)
@@ -326,6 +331,18 @@ export default function BookPage({
     }
   };
 
+  const handleJoinBorrowList = async () => {
+    if (!onJoinBorrowList || joiningBorrowList || waitlistedBorrow) return;
+    setJoiningBorrowList(true);
+    try {
+      await onJoinBorrowList(book);
+    } catch (error) {
+      window.alert(error.message || "Could not add this book to your borrow list.");
+    } finally {
+      setJoiningBorrowList(false);
+    }
+  };
+
   const handleOrder = async () => {
     if (!onOrder || ordering) return;
     setOrdering(true);
@@ -433,6 +450,8 @@ export default function BookPage({
                   ? "Pending Admin Approval"
                   : activeBorrow
                   ? "Currently Borrowed"
+                  : waitlistedBorrow && Number(book.availableBorrowCopies) <= 0
+                  ? "On Borrow List"
                   : Number(book.availableBorrowCopies) > 0
                   ? "Borrow"
                   : "Unavailable"}
@@ -440,10 +459,11 @@ export default function BookPage({
               <button
                 type="button"
                 className="bp-btn-borrow-arrow"
-                title="More borrow options"
-                onClick={() => alert("Options: Borrow e-Book, Reserve physical copy, Request extension")}
+                title={waitlistedBorrow ? "Already on your borrow list" : "Add to borrow list when available"}
+                onClick={handleJoinBorrowList}
+                disabled={joiningBorrowList || Boolean(waitlistedBorrow) || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableBorrowCopies) > 0}
               >
-                ▼
+                {joiningBorrowList ? "…" : waitlistedBorrow ? "✓" : "▼"}
               </button>
             </div>
 

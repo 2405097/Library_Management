@@ -555,6 +555,12 @@
   border: none;
 }
 
+.admin-layout .book-info-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 /* ==========================================================================
    Bento Grid Layout: My Admin Info (Replacing dated Screenshot 125 view!)
    ========================================================================== */
@@ -680,6 +686,21 @@
   transition: border-color 0.2s ease;
   display: flex;
   flex-direction: column;
+}
+
+.admin-layout .overview-navigation-card {
+  appearance: none;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-layout .overview-navigation-card:focus-visible {
+  outline: 3px solid var(--accent-blue-text);
+  outline-offset: 3px;
+  z-index: 1;
 }
 
 .admin-layout .info-card:hover {
@@ -1253,6 +1274,10 @@
   max-width: 680px;
 }
 
+.admin-layout .book-create-panel {
+  max-width: 900px;
+}
+
 .admin-layout .book-change-subtitle {
   font-size: 13px;
   color: var(--text-muted);
@@ -1310,6 +1335,42 @@
   border: 1px solid var(--border-medium);
   font-family: var(--font-sans);
   font-size: 13.5px;
+}
+
+.admin-layout .book-create-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-layout .book-create-form .book-form-full {
+  grid-column: 1 / -1;
+}
+
+.admin-layout .book-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-layout .book-create-error {
+  color: var(--status-danger-text);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+@media (max-width: 640px) {
+  .admin-layout .book-create-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-layout .book-create-form .book-form-full {
+    grid-column: auto;
+  }
+
+  .admin-layout .book-info-heading {
+    flex-wrap: wrap;
+  }
 }
 
 .admin-layout .book-change-form small {

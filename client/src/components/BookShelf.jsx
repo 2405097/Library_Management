@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./BookShelf.css";
+import { sortBooks } from "./bookSorting";
 
 function colorFromString(str = "") {
   let hash = 0;
@@ -7,17 +8,19 @@ function colorFromString(str = "") {
   return `hsl(${Math.abs(hash) % 360}, 45%, 55%)`;
 }
 
-export default function BookShelf({ genre, label, onBookClick }) {
-  const [books, setBooks] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function BookShelf({ genre, label, onBookClick, books: suppliedBooks, sortBy = "popularity" }) {
+  const [fetchedBooks, setFetchedBooks] = useState([]);
+  const [loading, setLoading] = useState(!suppliedBooks);
 
   useEffect(() => {
+    if (suppliedBooks) return undefined;
+
     let cancelled = false;
     fetch(`/api/books/search?field=genre&keyword=${encodeURIComponent(genre)}`)
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled) {
-          setBooks(Array.isArray(data) ? data : []);
+          setFetchedBooks(Array.isArray(data) ? data : []);
           setLoading(false);
         }
       })
@@ -27,7 +30,10 @@ export default function BookShelf({ genre, label, onBookClick }) {
     return () => {
       cancelled = true;
     };
-  }, [genre]);
+  }, [genre, suppliedBooks]);
+
+  const books = suppliedBooks || fetchedBooks;
+  const sortedBooks = sortBooks(books, sortBy);
 
   if (!loading && books.length === 0) return null;
 
@@ -39,7 +45,7 @@ export default function BookShelf({ genre, label, onBookClick }) {
           ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="shelf-card shelf-card--skeleton" />
             ))
-          : books.slice(0, 20).map((book) => (
+          : sortedBooks.slice(0, 20).map((book) => (
               <button
                 key={book.bookID}
                 className="shelf-card"

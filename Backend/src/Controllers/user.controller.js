@@ -14,6 +14,7 @@ import {
   deleteUserAccount,
   getBorrowRecordsByUserId,
   borrowBook,
+  addBorrowWaitlist,
   approveBorrow,
   rejectBorrow,
   returnBorrowedBook,
@@ -30,6 +31,7 @@ import {
   getRelatedBooksByBookId,
   getAdminSummary,
   getAdminBooks,
+  createAdminBook,
   getAdminBookReviews,
   getAdminFeedback,
   getAdminBorrowRecords,
@@ -291,6 +293,15 @@ export const searchBooks = async (req, res) => {
   }
 };
 
+export const getCatalogBooks = async (req, res) => {
+  try {
+    const books = await searchBooksByField('title', '');
+    res.status(200).json(books);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getBookDetails = async (req, res) => {
   try {
     const bookID = Number(req.params.id);
@@ -473,6 +484,66 @@ export const getAdminBooksData = async (req, res) => {
   }
 };
 
+export const createAdminBookData = async (req, res) => {
+  try {
+    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const authorInput = Array.isArray(req.body.authors)
+      ? req.body.authors
+      : String(req.body.authors || '').split(',');
+    const authors = authorInput
+      .filter((name) => typeof name === 'string')
+      .map((name) => name.trim())
+      .filter((name, index, names) => name && names.findIndex((candidate) => candidate.toLowerCase() === name.toLowerCase()) === index);
+    const publisher = typeof req.body.publisher === 'string' ? req.body.publisher.trim() : '';
+    const genre = typeof req.body.genre === 'string' ? req.body.genre.trim() : '';
+    const ISBN = typeof req.body.ISBN === 'string' ? req.body.ISBN.trim() : '';
+    const edition = typeof req.body.edition === 'string' ? req.body.edition.trim() : '';
+    const language = typeof req.body.language === 'string' ? req.body.language.trim() : '';
+    const price = Number(req.body.price);
+    const borrowCopies = Number(req.body.borrowCopies);
+    const orderCopies = Number(req.body.orderCopies);
+    const publicationYear = req.body.publicationYear === '' || req.body.publicationYear == null
+      ? null
+      : Number(req.body.publicationYear);
+
+    if (!title || title.length > 255 || authors.length === 0 || authors.some((name) => name.length > 100)) {
+      return res.status(400).json({ message: 'A title and at least one valid author are required.' });
+    }
+    if (publisher.length > 255 || genre.length > 100 || ISBN.length > 20 || edition.length > 50 || language.length > 50) {
+      return res.status(400).json({ message: 'One or more book fields exceed the allowed length.' });
+    }
+    if (req.body.price === '' || req.body.price == null || !Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ message: 'Price must be a non-negative number.' });
+    }
+    if (!Number.isInteger(borrowCopies) || borrowCopies < 0 || !Number.isInteger(orderCopies) || orderCopies < 0) {
+      return res.status(400).json({ message: 'Borrow and order copies must be non-negative whole numbers.' });
+    }
+    if (publicationYear !== null && (!Number.isInteger(publicationYear) || publicationYear < 0 || publicationYear > 9999)) {
+      return res.status(400).json({ message: 'Publication year must be a valid year.' });
+    }
+
+    const book = await createAdminBook({
+      title,
+      genre: genre || null,
+      ISBN: ISBN || null,
+      edition: edition || null,
+      publicationYear,
+      price,
+      borrowCopies,
+      orderCopies,
+      publisher: publisher || null,
+      language: language || null,
+      authors,
+    });
+    res.status(201).json({ message: 'Book added successfully.', book });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'A book with this ISBN already exists.' });
+    }
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const updateAdminBookData = async (req, res) => {
   try {
     const bookID = Number(req.params.bookID);
@@ -578,6 +649,31 @@ export const borrowBookForUser = async (req, res) => {
       return res.status(409).json({ message: 'This book is currently unavailable' });
     }
     res.status(201).json({ message: 'Borrow request placed and awaiting admin approval', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addBorrowWaitlistForUser = async (req, res) => {
+  try {
+    const bookID = Number(req.body.bookID);
+    if (!Number.isInteger(bookID) || bookID < 1) {
+      return res.status(400).json({ message: 'A valid book ID is required' });
+    }
+    const record = await addBorrowWaitlist(req.params.id, bookID);
+    if (record?.alreadyWaitlisted) {
+      return res.status(409).json({ message: 'This book is already on your borrow list' });
+    }
+    if (record?.alreadyPending || record?.alreadyBorrowed) {
+      return res.status(409).json({ message: 'You already have an active borrow request for this book' });
+    }
+    if (record?.available) {
+      return res.status(409).json({ message: 'This book is available to borrow now' });
+    }
+    if (!record) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+    res.status(201).json({ message: 'Book added to your borrow list', record });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

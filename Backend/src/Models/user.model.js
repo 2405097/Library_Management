@@ -563,7 +563,8 @@ export const getBorrowRecordsByUserId = async (userID) => {
       br."returnRequestedAt",
       br."bookID",
       br."copyNumber",
-      b.title AS "bookName"
+      b.title AS "bookName",
+      b."availableBorrowCopies"
     FROM borrow_record br
     LEFT JOIN book b ON b."bookID" = br."bookID"
     WHERE br."userID" = $1
@@ -590,14 +591,15 @@ export const borrowBook = async (userID, bookID) => {
        FROM borrow_record
        WHERE "userID" = $1
          AND "bookID" = $2
-         AND status IN ('PENDING', 'BORROWED', 'OVERDUE')
+         AND status IN ('WAITLISTED', 'PENDING', 'BORROWED', 'OVERDUE')
        LIMIT 1
        FOR UPDATE`,
       [userID, bookID]
     );
-    if (activeBorrowResult.rows[0]) {
+    const existingRecord = activeBorrowResult.rows[0];
+    if (existingRecord && existingRecord.status !== 'WAITLISTED') {
       await client.query('ROLLBACK');
-      const isPending = activeBorrowResult.rows[0].status === 'PENDING';
+      const isPending = existingRecord.status === 'PENDING';
       return { alreadyBorrowed: true, alreadyPending: isPending };
     }
 
@@ -639,14 +641,81 @@ export const borrowBook = async (userID, bookID) => {
       [bookID]
     );
 
-    const borrowResult = await client.query(
-      `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID", "copyNumber")
-       VALUES (NULL, NULL, 'PENDING', $1, $2, $3)
-       RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "copyNumber", "approvedAt"`,
-      [userID, bookID, copyResult.rows[0].copy_number]
-    );
+    const borrowResult = existingRecord
+      ? await client.query(
+          `UPDATE borrow_record
+           SET status = 'PENDING', "copyNumber" = $2, "requestedAt" = CURRENT_TIMESTAMP
+           WHERE "borrowID" = $1 AND status = 'WAITLISTED'
+           RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "copyNumber", "approvedAt"`,
+          [existingRecord.borrowID, copyResult.rows[0].copy_number]
+        )
+      : await client.query(
+          `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID", "copyNumber")
+           VALUES (NULL, NULL, 'PENDING', $1, $2, $3)
+           RETURNING "borrowID", "borrowDate", "requestedAt", "dueDate", "returnDate", status, "userID", "bookID", "copyNumber", "approvedAt"`,
+          [userID, bookID, copyResult.rows[0].copy_number]
+        );
     await client.query('COMMIT');
     return borrowResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const addBorrowWaitlist = async (userID, bookID) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'SELECT pg_advisory_xact_lock($1::integer, $2::integer)',
+      [userID, bookID]
+    );
+
+    const existingResult = await client.query(
+      `SELECT "borrowID", status
+       FROM borrow_record
+       WHERE "userID" = $1 AND "bookID" = $2
+         AND status IN ('WAITLISTED', 'PENDING', 'BORROWED', 'OVERDUE')
+       LIMIT 1
+       FOR UPDATE`,
+      [userID, bookID]
+    );
+    if (existingResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return {
+        alreadyWaitlisted: existingResult.rows[0].status === 'WAITLISTED',
+        alreadyPending: existingResult.rows[0].status === 'PENDING',
+        alreadyBorrowed: ['BORROWED', 'OVERDUE'].includes(existingResult.rows[0].status),
+      };
+    }
+
+    const bookResult = await client.query(
+      `SELECT "bookID", "availableBorrowCopies"
+       FROM book
+       WHERE "bookID" = $1
+       FOR UPDATE`,
+      [bookID]
+    );
+    if (!bookResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    if (Number(bookResult.rows[0].availableBorrowCopies) > 0) {
+      await client.query('ROLLBACK');
+      return { available: true };
+    }
+
+    const waitlistResult = await client.query(
+      `INSERT INTO borrow_record (status, "userID", "bookID")
+       VALUES ('WAITLISTED', $1, $2)
+       RETURNING "borrowID", "requestedAt", status, "userID", "bookID"`,
+      [userID, bookID]
+    );
+    await client.query('COMMIT');
+    return waitlistResult.rows[0];
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -974,6 +1043,91 @@ export const getAdminBooks = async () => {
   return rows;
 };
 
+export const createAdminBook = async ({
+  title,
+  genre,
+  ISBN,
+  edition,
+  publicationYear,
+  price,
+  borrowCopies,
+  orderCopies,
+  publisher,
+  language,
+  authors,
+}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let publisherID = null;
+    if (publisher) {
+      const publisherResult = await client.query(
+        `SELECT "publisherID" FROM publisher WHERE LOWER("publisherName") = LOWER($1) LIMIT 1`,
+        [publisher]
+      );
+      publisherID = publisherResult.rows[0]?.publisherID;
+      if (!publisherID) {
+        const insertedPublisher = await client.query(
+          `INSERT INTO publisher ("publisherName") VALUES ($1) RETURNING "publisherID"`,
+          [publisher]
+        );
+        publisherID = insertedPublisher.rows[0].publisherID;
+      }
+    }
+
+    const insertedBook = await client.query(
+      `INSERT INTO book
+         (title, genre, "ISBN", edition, "publicationYear", price, "totalCopies", "availableCopies", "availableBorrowCopies", "availableOrderCopies", "publisherID", language)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $7, $8, $9, $10)
+       RETURNING "bookID"`,
+      [title, genre, ISBN, edition, publicationYear, price, borrowCopies, orderCopies, publisherID, language]
+    );
+    const bookID = insertedBook.rows[0].bookID;
+
+    for (const authorName of authors) {
+      const authorResult = await client.query(
+        `SELECT "authorID" FROM author WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+        [authorName]
+      );
+      let authorID = authorResult.rows[0]?.authorID;
+      if (!authorID) {
+        const insertedAuthor = await client.query(
+          `INSERT INTO author (name) VALUES ($1) RETURNING "authorID"`,
+          [authorName]
+        );
+        authorID = insertedAuthor.rows[0].authorID;
+      }
+      await client.query(
+        `INSERT INTO book_author ("bookID", "authorID") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [bookID, authorID]
+      );
+    }
+
+    const result = await client.query(
+      `SELECT b."bookID", b.title, b.genre, b.price, b."ISBN", b.edition,
+              b."publicationYear", b.language, b."totalCopies",
+              b."availableBorrowCopies", b."availableOrderCopies",
+              p."publisherName", STRING_AGG(DISTINCT a.name, ', ') AS author_names
+       FROM book b
+       LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
+       LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+       LEFT JOIN author a ON a."authorID" = ba."authorID"
+       WHERE b."bookID" = $1
+       GROUP BY b."bookID", p."publisherName"`,
+      [bookID]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export const updateAdminBook = async (bookID, borrowDelta, orderDelta, price) => {
   const client = await pool.connect();
   try {
@@ -1055,6 +1209,7 @@ export const getAdminBorrowRecords = async () => {
       br."returnRequestedAt",
       br."bookID",
       br."copyNumber",
+      u."userID" AS member_id,
       COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name
     FROM borrow_record br

@@ -14,7 +14,7 @@ const startServer = async () => {
     // 2. Ensure required database tables exist
     await initializeDatabase();
 
-    const PORT = process.env.PORT || 4000;
+    const PORT = process.env.PORT || 8000;
 
     // 3. Start Express app listener
     app.listen(PORT, '0.0.0.0', () => {

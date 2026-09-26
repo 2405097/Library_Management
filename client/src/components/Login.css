@@ -742,7 +742,7 @@
 .admin-table-borrows {
   table-layout: fixed;
   width: 100%;
-  min-width: 960px;
+  min-width: 1040px;
 }
 .admin-table-borrows th:nth-child(1),
 .admin-table-borrows td:nth-child(1) {
@@ -751,36 +751,41 @@
 }
 .admin-table-borrows th:nth-child(2),
 .admin-table-borrows td:nth-child(2) {
-  width: 20%;
-  overflow-wrap: break-word;
-  word-break: normal;
+  width: 6%;
+  white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(3),
 .admin-table-borrows td:nth-child(3) {
-  width: 13%;
+  width: 18%;
   overflow-wrap: break-word;
+  word-break: normal;
 }
 .admin-table-borrows th:nth-child(4),
 .admin-table-borrows td:nth-child(4) {
-  width: 11%;
-  white-space: nowrap;
+  width: 12%;
+  overflow-wrap: break-word;
 }
 .admin-table-borrows th:nth-child(5),
 .admin-table-borrows td:nth-child(5) {
-  width: 12%;
+  width: 11%;
   white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(6),
 .admin-table-borrows td:nth-child(6) {
   width: 11%;
+  white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(7),
 .admin-table-borrows td:nth-child(7) {
-  width: 8%;
-  white-space: nowrap;
+  width: 11%;
 }
 .admin-table-borrows th:nth-child(8),
 .admin-table-borrows td:nth-child(8) {
+  width: 8%;
+  white-space: nowrap;
+}
+.admin-table-borrows th:nth-child(9),
+.admin-table-borrows td:nth-child(9) {
   width: 16%;
 }
 

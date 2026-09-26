@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getAdminDashboardSummary,
   getAdminBooksData,
+  createAdminBookData,
   updateAdminBookData,
   getAdminBookReviewsData,
   getAdminFeedbackData,
@@ -22,6 +23,7 @@ const router = express.Router();
 // All admin routes require a valid JWT AND ADMIN role
 router.get('/summary', authenticate, authorize('ADMIN'), getAdminDashboardSummary);
 router.get('/books', authenticate, authorize('ADMIN'), getAdminBooksData);
+router.post('/books', authenticate, authorize('ADMIN'), createAdminBookData);
 router.put('/books/:bookID', authenticate, authorize('ADMIN'), updateAdminBookData);
 router.get('/book-reviews', authenticate, authorize('ADMIN'), getAdminBookReviewsData);
 router.get('/feedback', authenticate, authorize('ADMIN'), getAdminFeedbackData);

@@ -6,6 +6,7 @@ import iconStar from "../assets/star.svg";
 import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
 import AccountDeletionDialog from "./AccountDeletionDialog";
+import { SORT_OPTIONS, sortBooks } from "./bookSorting";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },
@@ -14,6 +15,21 @@ const SEARCH_OPTIONS = [
   { value: "author", label: "Author" },
   { value: "publisher", label: "Publisher" },
 ];
+
+const GENRES = [
+  "Thriller",
+  "Classic Literature",
+  "Science Fiction",
+  "Mystery",
+  "Fantasy",
+  "Romance",
+  "History",
+  "Biography",
+  "Mathematics",
+  "Science",
+  "CSE",
+  "Algorithms",
+].sort((left, right) => left.localeCompare(right));
 
 const WISHLIST_LISTS = [
   { key: "CURRENTLY_READING", label: "Currently Reading", icon: iconBookOpen },
@@ -63,6 +79,9 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [searchField, setSearchField] = useState("title");
   const [searchValue, setSearchValue] = useState("");
   const [books, setBooks] = useState([]);
+  const [sortBy, setSortBy] = useState("popularity");
+  const [catalogBooks, setCatalogBooks] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -87,8 +106,28 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
+  const [requestingWaitlistBorrowID, setRequestingWaitlistBorrowID] = useState(null);
 
   const drawerRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/books/catalog")
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => {
+        if (!cancelled) setCatalogBooks(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogBooks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch user-specific data
   useEffect(() => {
@@ -110,6 +149,27 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
       setWishlist(wRes.ok ? await wRes.json() : []);
     }).catch(() => {});
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.userID || activeSection !== "borrow_record") return undefined;
+    let cancelled = false;
+    const refreshBorrowRecords = async () => {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}/borrow-records`, {
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      if (response.ok) {
+        const records = await response.json();
+        if (!cancelled) setBorrowRecords(Array.isArray(records) ? records : []);
+      }
+    };
+    refreshBorrowRecords().catch(() => {});
+    const intervalID = window.setInterval(() => refreshBorrowRecords().catch(() => {}), 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalID);
+    };
+  }, [activeSection, user?.userID]);
 
   // Close drawer on outside click
   useEffect(() => {
@@ -178,6 +238,9 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     goHome();
   };
 
+  const sortedSearchBooks = sortBooks(books, sortBy);
+  const popularBooks = sortBooks(catalogBooks, "popularity").slice(0, 10);
+
   const handleBorrow = async (book) => {
     const activeRecord = borrowRecords.find(
       (record) => String(record.bookID) === String(book.bookID)
@@ -205,9 +268,32 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     setBooks((current) => current.map((b) => String(b.bookID) === String(book.bookID) ? { ...b, availableBorrowCopies: Math.max(0, Number(b.availableBorrowCopies || 0) - 1) } : b));
     setBorrowRecords((current) => [
       { ...data.record, bookName: book.title },
-      ...current,
+      ...current.filter((record) => String(record.borrowID || record.borrowid) !== String(data.record.borrowID)),
     ]);
     window.alert(`Borrow request placed for "${book.title}". Waiting for admin approval.`);
+  };
+
+  const handleJoinBorrowList = async (book) => {
+    const token = sessionStorage.getItem('library_token');
+    const response = await fetch(`/api/users/${user.userID}/borrow-records`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      body: JSON.stringify({ bookID: book.bookID }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Could not add this book to your borrow list.');
+    setBorrowRecords((current) => [{ ...data.record, bookName: book.title, availableBorrowCopies: 0 }, ...current]);
+  };
+
+  const handleBorrowFromWaitlist = async (record) => {
+    setRequestingWaitlistBorrowID(record.borrowID);
+    try {
+      await handleBorrow({ bookID: record.bookID, title: record.bookName });
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setRequestingWaitlistBorrowID(null);
+    }
   };
 
   const handleRequestReturn = async (borrowID) => {
@@ -644,7 +730,9 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                     </thead>
                     <tbody>
                       {borrowRecords.map((r) => {
-                        const isApproved = ["BORROWED", "OVERDUE"].includes((r.status || "").toUpperCase());
+                        const status = (r.status || "").toUpperCase();
+                        const isApproved = ["BORROWED", "OVERDUE"].includes(status);
+                        const availableToBorrow = status === "WAITLISTED" && Number(r.availableBorrowCopies) > 0;
                         const hasRequestedReturn = Boolean(r.returnRequested || r.returnrequested);
                         return (
                           <tr key={r.borrowID}>
@@ -656,7 +744,9 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                             <td>TK {Number(r.delayFee || 0).toFixed(0)}</td>
                             <td>
                               <span className={`status-chip status-${(r.status || "").toLowerCase()}`}>
-                                {r.status === "PENDING"
+                                {status === "WAITLISTED"
+                                  ? "Waiting for a copy"
+                                  : status === "PENDING"
                                   ? "Pending Admin Approval"
                                   : r.status === "FINE_DUE"
                                   ? "Fine due"
@@ -670,7 +760,23 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                               </span>
                             </td>
                             <td>
-                              {isApproved ? (
+                              {status === "WAITLISTED" ? (
+                                availableToBorrow ? (
+                                  <button
+                                    type="button"
+                                    className="lib-primary-action"
+                                    style={{ padding: "4px 12px", fontSize: "0.82rem", cursor: "pointer" }}
+                                    onClick={() => handleBorrowFromWaitlist(r)}
+                                    disabled={requestingWaitlistBorrowID === r.borrowID}
+                                  >
+                                    {requestingWaitlistBorrowID === r.borrowID ? "Submitting..." : "Available Borrow"}
+                                  </button>
+                                ) : (
+                                  <span>Not available to borrow</span>
+                                )
+                              ) : status === "PENDING" ? (
+                                <span>Pending Admin Approval</span>
+                              ) : isApproved ? (
                                 hasRequestedReturn ? (
                                   <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>
                                     Return Requested
@@ -977,6 +1083,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             bookId={selectedBookId}
             onBack={handleBackFromBook}
             onBorrow={handleBorrow}
+            onJoinBorrowList={handleJoinBorrowList}
             onOrder={handleOrder}
             onAddToWishlist={handleAddToWishlist}
             wishlist={wishlist}
@@ -990,29 +1097,35 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
               <h1>Welcome to the Library</h1>
               <p>Use the search bar above to find books by title, author, genre, publisher, or ID.</p>
             </div>
+            <div className="lib-browse-toolbar">
+              <label htmlFor="home-sort">Sort books</label>
+              <select id="home-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
             <div className="lib-shelves">
-              <BookShelf genre="Thriller" label="Thrillers" onBookClick={handleSelectBook} />
-              <BookShelf genre="Classic Literature" label="Classic Literature" onBookClick={handleSelectBook} />
-              <BookShelf genre="Science Fiction" label="Science Fiction" onBookClick={handleSelectBook} />
-              <BookShelf genre="Mystery" label="Mystery" onBookClick={handleSelectBook} />
-              <BookShelf genre="Fantasy" label="Fantasy" onBookClick={handleSelectBook} />
-              <BookShelf genre="Romance" label="Romance" onBookClick={handleSelectBook} />
-              <BookShelf genre="History" label="History" onBookClick={handleSelectBook} />
-              <BookShelf genre="Biography" label="Biography" onBookClick={handleSelectBook} />
-              <BookShelf genre="Mathematics" label="Mathematics" onBookClick={handleSelectBook} />
-              <BookShelf genre="Science" label="Science" onBookClick={handleSelectBook} />
-              <BookShelf genre="CSE" label="CSE" onBookClick={handleSelectBook} />
-              <BookShelf genre="Algorithms" label="Algorithms" onBookClick={handleSelectBook} />
+              <BookShelf label="Most popular books" books={popularBooks} sortBy="popularity" onBookClick={handleSelectBook} />
+              {!catalogLoading && GENRES.map((genre) => (
+                <BookShelf key={genre} genre={genre} label={genre} sortBy={sortBy} onBookClick={handleSelectBook} />
+              ))}
             </div>
           </div>
         ) : (
           <div className="lib-results-section">
             <div className="lib-results-header">
-              <h2>
-                {isSearching
-                  ? "Searching…"
-                  : `${books.length} result${books.length !== 1 ? "s" : ""} for "${searchValue}"`}
-              </h2>
+              <div>
+                <h2>
+                  {isSearching
+                    ? "Searching…"
+                    : `${books.length} result${books.length !== 1 ? "s" : ""} for "${searchValue}"`}
+                </h2>
+              </div>
+              <label className="lib-sort-control" htmlFor="results-sort">
+                Sort by
+                <select id="results-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                  {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
             </div>
             {books.length === 0 && !isSearching ? (
               <div className="lib-no-results">
@@ -1020,7 +1133,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
               </div>
             ) : (
               <div className="lib-book-grid">
-                {books.map((book) => (
+                {sortedSearchBooks.map((book) => (
                   <div
                     className="lib-book-card"
                     key={book.bookID}

@@ -65,6 +65,7 @@ export const initializeDatabase = async () => {
           FROM borrow_record br
           JOIN book b ON b."bookID" = br."bookID"
           WHERE br."copyNumber" IS NULL
+            AND br.status <> 'WAITLISTED'
         )
         UPDATE borrow_record br
         SET "copyNumber" = ((numbered_records.record_number - 1) % numbered_records.total_copies) + 1
@@ -159,7 +160,7 @@ export const initializeDatabase = async () => {
           END IF;
           ALTER TABLE borrow_record
           ADD CONSTRAINT borrow_record_status_check
-          CHECK (status IN ('PENDING', 'BORROWED', 'RETURNED', 'FINE_DUE', 'RETURNED_WITH_FINE', 'FINE_WAIVED', 'OVERDUE', 'LOST', 'REJECTED'));
+          CHECK (status IN ('WAITLISTED', 'PENDING', 'BORROWED', 'RETURNED', 'FINE_DUE', 'RETURNED_WITH_FINE', 'FINE_WAIVED', 'OVERDUE', 'LOST', 'REJECTED'));
         END $$;
       `);
       await pool.query(`
