@@ -950,7 +950,7 @@
 .admin-layout .account-actions-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 14px;
   margin-top: 24px;
   padding-top: 20px;

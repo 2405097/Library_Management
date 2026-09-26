@@ -26,7 +26,6 @@ const GENRES = [
   "History",
   "Biography",
   "Mathematics",
-  "Science",
   "CSE",
   "Algorithms",
 ].sort((left, right) => left.localeCompare(right));
