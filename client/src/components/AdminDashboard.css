@@ -1171,6 +1171,12 @@
   border: 1px solid var(--border-medium);
 }
 
+.admin-layout .status-chip.status-waitlisted {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
 /* Pagination Controls */
 .admin-layout .pagination-controls {
   display: flex;

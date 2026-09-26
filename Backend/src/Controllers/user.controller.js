@@ -15,6 +15,7 @@ import {
   getBorrowRecordsByUserId,
   borrowBook,
   addBorrowWaitlist,
+  cancelBorrowWaitlist,
   approveBorrow,
   rejectBorrow,
   returnBorrowedBook,
@@ -26,6 +27,7 @@ import {
   getLibraryReviewsByUserId,
   createLibraryReview,
   searchBooksByField,
+  getPopularBooks,
   getBookDetailsById,
   getBookReviewsByBookId,
   getRelatedBooksByBookId,
@@ -296,6 +298,16 @@ export const searchBooks = async (req, res) => {
 export const getCatalogBooks = async (req, res) => {
   try {
     const books = await searchBooksByField('title', '');
+    res.status(200).json(books);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getPopularBooksData = async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 10;
+    const books = await getPopularBooks(limit);
     res.status(200).json(books);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -674,6 +686,22 @@ export const addBorrowWaitlistForUser = async (req, res) => {
       return res.status(404).json({ message: 'Book not found' });
     }
     res.status(201).json({ message: 'Book added to your borrow list', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const cancelBorrowWaitlistForUser = async (req, res) => {
+  try {
+    const borrowID = Number(req.params.borrowID);
+    if (!Number.isInteger(borrowID) || borrowID < 1) {
+      return res.status(400).json({ message: 'A valid borrow ID is required' });
+    }
+    const result = await cancelBorrowWaitlist(req.params.id, borrowID);
+    if (!result) {
+      return res.status(404).json({ message: 'Waitlist record not found or cannot be cancelled' });
+    }
+    res.status(200).json({ message: 'Removed from borrow list', borrowID: result.borrowID });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

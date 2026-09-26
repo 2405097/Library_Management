@@ -169,7 +169,11 @@ export const initializeDatabase = async () => {
       `);
       await pool.query(`
         ALTER TABLE borrow_record
-        ALTER COLUMN "borrowDate" DROP NOT NULL;
+        ALTER COLUMN "borrowDate" DROP NOT NULL,
+        ALTER COLUMN "borrowDate" DROP DEFAULT;
+        UPDATE borrow_record
+        SET "borrowDate" = NULL
+        WHERE status = 'WAITLISTED';
       `);
       await pool.query(`
         ALTER TABLE borrow_record

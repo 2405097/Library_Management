@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import "./Dashboard.css";
 import iconBookOpen from "../assets/book-open.svg";
 import iconBookmarkCheck from "../assets/bookmark-check.svg";
@@ -79,9 +79,10 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [searchField, setSearchField] = useState("title");
   const [searchValue, setSearchValue] = useState("");
   const [books, setBooks] = useState([]);
-  const [sortBy, setSortBy] = useState("popularity");
-  const [catalogBooks, setCatalogBooks] = useState([]);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [homeSortBy, setHomeSortBy] = useState("popularity");
+  const [searchSortBy, setSearchSortBy] = useState("popularity");
+  const [popularBooks, setPopularBooks] = useState([]);
+  const [popularLoading, setPopularLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
@@ -107,21 +108,22 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [requestingWaitlistBorrowID, setRequestingWaitlistBorrowID] = useState(null);
+  const [cancellingWaitlistID, setCancellingWaitlistID] = useState(null);
 
   const drawerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/books/catalog")
+    fetch("/api/books/popular?limit=10")
       .then((response) => (response.ok ? response.json() : []))
       .then((data) => {
-        if (!cancelled) setCatalogBooks(Array.isArray(data) ? data : []);
+        if (!cancelled) setPopularBooks(Array.isArray(data) ? data : []);
       })
       .catch(() => {
-        if (!cancelled) setCatalogBooks([]);
+        if (!cancelled) setPopularBooks([]);
       })
       .finally(() => {
-        if (!cancelled) setCatalogLoading(false);
+        if (!cancelled) setPopularLoading(false);
       });
 
     return () => {
@@ -238,8 +240,8 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     goHome();
   };
 
-  const sortedSearchBooks = sortBooks(books, sortBy);
-  const popularBooks = sortBooks(catalogBooks, "popularity").slice(0, 10);
+  const sortedSearchBooks = useMemo(() => sortBooks(books, searchSortBy), [books, searchSortBy]);
+  const sortedPopularBooks = useMemo(() => sortBooks(popularBooks, "popularity"), [popularBooks]);
 
   const handleBorrow = async (book) => {
     const activeRecord = borrowRecords.find(
@@ -293,6 +295,26 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
       window.alert(error.message);
     } finally {
       setRequestingWaitlistBorrowID(null);
+    }
+  };
+
+  const handleCancelWaitlist = async (borrowID) => {
+    if (cancellingWaitlistID) return;
+    if (!window.confirm("Are you sure you want to remove this book from your borrow waitlist?")) return;
+    setCancellingWaitlistID(borrowID);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/users/${user.userID}/borrow-records/${borrowID}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not cancel waitlist request.');
+      setBorrowRecords((current) => current.filter((record) => String(record.borrowID || record.borrowid) !== String(borrowID)));
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setCancellingWaitlistID(null);
     }
   };
 
@@ -761,19 +783,30 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
                             </td>
                             <td>
                               {status === "WAITLISTED" ? (
-                                availableToBorrow ? (
+                                <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                                  {availableToBorrow ? (
+                                    <button
+                                      type="button"
+                                      className="lib-primary-action"
+                                      style={{ padding: "4px 12px", fontSize: "0.82rem", cursor: "pointer" }}
+                                      onClick={() => handleBorrowFromWaitlist(r)}
+                                      disabled={requestingWaitlistBorrowID === r.borrowID || cancellingWaitlistID === r.borrowID}
+                                    >
+                                      {requestingWaitlistBorrowID === r.borrowID ? "Submitting..." : "Available Borrow"}
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>Waiting for a copy</span>
+                                  )}
                                   <button
                                     type="button"
-                                    className="lib-primary-action"
-                                    style={{ padding: "4px 12px", fontSize: "0.82rem", cursor: "pointer" }}
-                                    onClick={() => handleBorrowFromWaitlist(r)}
-                                    disabled={requestingWaitlistBorrowID === r.borrowID}
+                                    className="lib-secondary-action"
+                                    style={{ padding: "4px 8px", fontSize: "0.78rem", cursor: "pointer" }}
+                                    onClick={() => handleCancelWaitlist(r.borrowID)}
+                                    disabled={cancellingWaitlistID === r.borrowID || requestingWaitlistBorrowID === r.borrowID}
                                   >
-                                    {requestingWaitlistBorrowID === r.borrowID ? "Submitting..." : "Available Borrow"}
+                                    {cancellingWaitlistID === r.borrowID ? "Cancelling..." : "Cancel"}
                                   </button>
-                                ) : (
-                                  <span>Not available to borrow</span>
-                                )
+                                </div>
                               ) : status === "PENDING" ? (
                                 <span>Pending Admin Approval</span>
                               ) : isApproved ? (
@@ -1099,14 +1132,14 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             </div>
             <div className="lib-browse-toolbar">
               <label htmlFor="home-sort">Sort books</label>
-              <select id="home-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+              <select id="home-sort" value={homeSortBy} onChange={(event) => setHomeSortBy(event.target.value)}>
                 {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </div>
             <div className="lib-shelves">
-              <BookShelf label="Most popular books" books={popularBooks} sortBy="popularity" onBookClick={handleSelectBook} />
-              {!catalogLoading && GENRES.map((genre) => (
-                <BookShelf key={genre} genre={genre} label={genre} sortBy={sortBy} onBookClick={handleSelectBook} />
+              <BookShelf label="Most popular books" books={sortedPopularBooks} loading={popularLoading} sortBy="popularity" onBookClick={handleSelectBook} />
+              {GENRES.map((genre) => (
+                <BookShelf key={genre} genre={genre} label={genre} sortBy={homeSortBy} onBookClick={handleSelectBook} />
               ))}
             </div>
           </div>
@@ -1122,7 +1155,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
               </div>
               <label className="lib-sort-control" htmlFor="results-sort">
                 Sort by
-                <select id="results-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                <select id="results-sort" value={searchSortBy} onChange={(event) => setSearchSortBy(event.target.value)}>
                   {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>

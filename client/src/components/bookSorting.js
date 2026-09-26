@@ -14,7 +14,8 @@ const compareRatingTieBreakers = (left, right) => (
   || titleValue(left).localeCompare(titleValue(right), undefined, { sensitivity: "base" })
 );
 
-export function sortBooks(books, sortBy = "popularity") {
+export function sortBooks(books = [], sortBy = "popularity") {
+  if (!Array.isArray(books)) return [];
   return [...books].sort((left, right) => {
     if (sortBy === "price-asc") {
       return numericValue(left.price) - numericValue(right.price)

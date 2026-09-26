@@ -435,6 +435,67 @@ export const searchBooksByField = async (field, keyword) => {
 };
 
 /**
+ * Retrieve top popular books directly using database-level sorting and limit
+ */
+export const getPopularBooks = async (limit = 10) => {
+  const query = `
+    SELECT
+      b."bookID",
+      b.title,
+      b.genre,
+      b.price,
+      b."ISBN",
+      b."publicationYear",
+      b.avg_rating,
+      b.language,
+      b.edition,
+      b."totalCopies",
+      b."availableBorrowCopies",
+      b."availableOrderCopies",
+      (SELECT COUNT(*) FROM borrow_record br2 WHERE br2."bookID" = b."bookID" AND br2.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) AS borrow_count,
+      (SELECT COALESCE(SUM(o2.quantity), 0) FROM "ORDER" o2 WHERE o2."bookID" = b."bookID" AND o2.status = 'APPROVED') AS sold_count,
+      (SELECT COUNT(*)::INT FROM book_review br WHERE br."bookID" = b."bookID") AS rating_count,
+      (SELECT COUNT(*)::INT FROM wishlist w WHERE w."bookID" = b."bookID" AND w."listType" = 'WANT_TO_READ') AS want_to_read_count,
+      (SELECT COUNT(*)::INT FROM wishlist w WHERE w."bookID" = b."bookID" AND w."listType" = 'CURRENTLY_READING') AS currently_reading_count,
+      p."publisherName",
+      STRING_AGG(DISTINCT a.name, ', ') AS author_name
+    FROM book b
+    LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
+    LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
+    LEFT JOIN author a ON a."authorID" = ba."authorID"
+    GROUP BY b."bookID", b.title, b.genre, b.price, b."ISBN", b."publicationYear", b.avg_rating, b.language, b.edition, b."totalCopies", b."availableBorrowCopies", b."availableOrderCopies", p."publisherName"
+    ORDER BY (
+      (SELECT COUNT(*) FROM borrow_record br2 WHERE br2."bookID" = b."bookID" AND br2.status IN ('BORROWED', 'RETURNED', 'OVERDUE', 'LOST')) +
+      (SELECT COALESCE(SUM(o2.quantity), 0) FROM "ORDER" o2 WHERE o2."bookID" = b."bookID" AND o2.status = 'APPROVED')
+    ) DESC, b.avg_rating DESC NULLS LAST, b.title ASC
+    LIMIT $1;
+  `;
+
+  const { rows } = await pool.query(query, [Math.max(1, Number(limit) || 10)]);
+  return rows.map((book) => ({
+    bookID: book.bookID,
+    title: book.title,
+    genre: book.genre,
+    authorName: book.author_name,
+    publisher: book.publisherName,
+    price: Number(book.price || 0),
+    ISBN: book.ISBN,
+    publicationYear: book.publicationYear,
+    avgRating: book.avg_rating != null ? Number(book.avg_rating) : 0,
+    ratingCount: Number(book.rating_count || 0),
+    wantToReadCount: Number(book.want_to_read_count || 0),
+    currentlyReadingCount: Number(book.currently_reading_count || 0),
+    language: book.language || "English",
+    edition: book.edition,
+    totalCopies: book.totalCopies,
+    availableBorrowCopies: book.availableBorrowCopies,
+    availableOrderCopies: book.availableOrderCopies,
+    borrowCount: Number(book.borrow_count || 0),
+    soldCount: Number(book.sold_count || 0),
+  }));
+};
+
+/**
  * Retrieve full book details by ID including stats from PostgreSQL function fn_get_book_rating_stats
  */
 export const getBookDetailsById = async (bookID) => {
@@ -709,9 +770,9 @@ export const addBorrowWaitlist = async (userID, bookID) => {
     }
 
     const waitlistResult = await client.query(
-      `INSERT INTO borrow_record (status, "userID", "bookID")
-       VALUES ('WAITLISTED', $1, $2)
-       RETURNING "borrowID", "requestedAt", status, "userID", "bookID"`,
+      `INSERT INTO borrow_record ("borrowDate", "dueDate", status, "userID", "bookID")
+       VALUES (NULL, NULL, 'WAITLISTED', $1, $2)
+       RETURNING "borrowID", "borrowDate", "dueDate", "requestedAt", status, "userID", "bookID"`,
       [userID, bookID]
     );
     await client.query('COMMIT');
@@ -722,6 +783,16 @@ export const addBorrowWaitlist = async (userID, bookID) => {
   } finally {
     client.release();
   }
+};
+
+export const cancelBorrowWaitlist = async (userID, borrowID) => {
+  const query = `
+    DELETE FROM borrow_record
+    WHERE "borrowID" = $1 AND "userID" = $2 AND status = 'WAITLISTED'
+    RETURNING "borrowID", "bookID";
+  `;
+  const { rows } = await pool.query(query, [borrowID, userID]);
+  return rows[0] || null;
 };
 
 export const approveBorrow = async (borrowID) => {

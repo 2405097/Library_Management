@@ -8,40 +8,60 @@ function colorFromString(str = "") {
   return `hsl(${Math.abs(hash) % 360}, 45%, 55%)`;
 }
 
-export default function BookShelf({ genre, label, onBookClick, books: suppliedBooks, sortBy = "popularity" }) {
+export default function BookShelf({
+  genre,
+  label,
+  onBookClick,
+  books: suppliedBooks,
+  loading: suppliedLoading,
+  sortBy = "popularity",
+}) {
   const [fetchedBooks, setFetchedBooks] = useState([]);
-  const [loading, setLoading] = useState(!suppliedBooks);
+  const [fetchedLoading, setFetchedLoading] = useState(true);
+
+  const isSupplied = Array.isArray(suppliedBooks);
 
   useEffect(() => {
-    if (suppliedBooks) return undefined;
+    if (isSupplied) return undefined;
 
     let cancelled = false;
+
     fetch(`/api/books/search?field=genre&keyword=${encodeURIComponent(genre)}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load shelf");
+        return r.json();
+      })
       .then((data) => {
         if (!cancelled) {
           setFetchedBooks(Array.isArray(data) ? data : []);
-          setLoading(false);
+          setFetchedLoading(false);
         }
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setFetchedBooks([]);
+          setFetchedLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [genre, suppliedBooks]);
+  }, [genre, isSupplied]);
 
-  const books = suppliedBooks || fetchedBooks;
+  const books = isSupplied ? suppliedBooks : fetchedBooks;
+  const isLoading = isSupplied
+    ? (typeof suppliedLoading === "boolean" ? suppliedLoading : false)
+    : fetchedLoading;
+
   const sortedBooks = sortBooks(books, sortBy);
 
-  if (!loading && books.length === 0) return null;
+  if (!isLoading && books.length === 0) return null;
 
   return (
     <section className="shelf">
       <h2 className="shelf-label">{label}</h2>
       <div className="shelf-track">
-        {loading
+        {isLoading
           ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="shelf-card shelf-card--skeleton" />
             ))

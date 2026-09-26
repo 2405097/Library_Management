@@ -438,32 +438,47 @@ export default function BookPage({
 
             {/* Borrow Button */}
             <div className="bp-borrow-group">
-              <button
-                type="button"
-                className="bp-btn-borrow"
-                onClick={handleBorrow}
-                disabled={borrowing || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableBorrowCopies) <= 0}
-              >
-                {borrowing
-                  ? "Submitting..."
-                  : pendingBorrow
-                  ? "Pending Admin Approval"
-                  : activeBorrow
-                  ? "Currently Borrowed"
-                  : waitlistedBorrow && Number(book.availableBorrowCopies) <= 0
-                  ? "On Borrow List"
-                  : Number(book.availableBorrowCopies) > 0
-                  ? "Borrow"
-                  : "Unavailable"}
-              </button>
+              {Number(book.availableBorrowCopies) <= 0 ? (
+                <button
+                  type="button"
+                  className="bp-btn-borrow"
+                  onClick={handleJoinBorrowList}
+                  disabled={joiningBorrowList || Boolean(waitlistedBorrow) || Boolean(pendingBorrow) || Boolean(activeBorrow)}
+                >
+                  {joiningBorrowList
+                    ? "Submitting..."
+                    : pendingBorrow
+                    ? "Pending Admin Approval"
+                    : activeBorrow
+                    ? "Currently Borrowed"
+                    : waitlistedBorrow
+                    ? "On Borrow List"
+                    : "Join Borrow List"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="bp-btn-borrow"
+                  onClick={handleBorrow}
+                  disabled={borrowing || Boolean(pendingBorrow) || Boolean(activeBorrow)}
+                >
+                  {borrowing
+                    ? "Submitting..."
+                    : pendingBorrow
+                    ? "Pending Admin Approval"
+                    : activeBorrow
+                    ? "Currently Borrowed"
+                    : "Borrow"}
+                </button>
+              )}
               <button
                 type="button"
                 className="bp-btn-borrow-arrow"
-                title={waitlistedBorrow ? "Already on your borrow list" : "Add to borrow list when available"}
-                onClick={handleJoinBorrowList}
-                disabled={joiningBorrowList || Boolean(waitlistedBorrow) || Boolean(pendingBorrow) || Boolean(activeBorrow) || Number(book.availableBorrowCopies) > 0}
+                title={waitlistedBorrow ? "Already on your borrow list" : Number(book.availableBorrowCopies) <= 0 ? "Add to borrow list when available" : "Borrow available"}
+                onClick={Number(book.availableBorrowCopies) <= 0 ? handleJoinBorrowList : handleBorrow}
+                disabled={joiningBorrowList || borrowing || Boolean(waitlistedBorrow) || Boolean(pendingBorrow) || Boolean(activeBorrow)}
               >
-                {joiningBorrowList ? "…" : waitlistedBorrow ? "✓" : "▼"}
+                {joiningBorrowList || borrowing ? "…" : waitlistedBorrow ? "✓" : Number(book.availableBorrowCopies) <= 0 ? "+" : "▼"}
               </button>
             </div>
 
