@@ -652,10 +652,10 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             href="/"
             className="lib-logo"
             onClick={goHome}
-            title="LibraryMS - Return to Home"
+            title="Open Library 2.0 - Return to Home"
           >
             <img src={iconBookOpen} alt="" className="lib-logo-icon" aria-hidden="true" />
-            <span className="lib-logo-text">Library<strong>MS</strong></span>
+            <span className="lib-logo-text">Open Library <strong>2.0</strong></span>
           </a>
 
           {/* Search bar */}

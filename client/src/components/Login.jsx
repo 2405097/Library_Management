@@ -185,7 +185,7 @@ export default function Login({ onLoginSuccess }) {
         <span className="auth-brand-icon">
           <img src={bookIcon} alt="" aria-hidden="true" />
         </span>
-        <span className="auth-brand-name">Library<strong>MS</strong></span>
+        <span className="auth-brand-name">Open Library <strong>2.0</strong></span>
       </div>
 
       <div className="auth-card">
