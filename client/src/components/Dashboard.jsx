@@ -7,7 +7,7 @@ import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
 import AccountDeletionDialog from "./AccountDeletionDialog";
 import PasswordChangeForm from "./PasswordChangeForm";
-import { SORT_OPTIONS, sortBooks } from "./bookSorting";
+import { SORT_OPTIONS, sortBooks } from "../utils/bookSorting";
 
 const SEARCH_OPTIONS = [
   { value: "title", label: "Title" },

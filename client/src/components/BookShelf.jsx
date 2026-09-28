@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./BookShelf.css";
-import { sortBooks } from "./bookSorting";
+import { sortBooks } from "../utils/bookSorting";
 
 function colorFromString(str = "") {
   let hash = 0;

@@ -55,8 +55,11 @@ Library_Management/
             ├── AdminDashboard.css
             ├── AccountDeletionDialog.jsx  # Re-authentication modal for self-service account deletion
             ├── AccountDeletionDialog.css
-            ├── bookSorting.js             # Multi-criteria sorting helper (price, popularity, rating)
-            └── assets/                    # SVG icons (book-open, bookmark-check, star, etc.)
+            ├── PasswordChangeForm.jsx     # Reusable password change component
+            └── PasswordChangeForm.css
+        ├── utils/
+        │   └── bookSorting.js             # Multi-criteria sorting helper (price, popularity, rating)
+        └── assets/                        # SVG icons (book-open, bookmark-check, star, etc.)
 ```
 
 ---
@@ -224,7 +227,7 @@ Comprehensive administrative panel with balanced table layouts:
 - **Ordered Book Info:** Purchase requests ordered strictly by timestamp descending (`orderedAt DESC, purchaseNo DESC`) with copy restoration on rejection.
 - **Book Reviews & Feedback:** Review moderation and feedback inspection.
 
-### `bookSorting.js`
+### `utils/bookSorting.js`
 Reusable sorting helper used by shelves, search results, and catalogs.
 - `price-asc`: Price low-to-high, title tie-breaker.
 - `price-desc`: Price high-to-low, title tie-breaker.
