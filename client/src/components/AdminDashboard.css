@@ -1101,6 +1101,74 @@
   border-bottom: none;
 }
 
+/* Borrow Book Info Table Column Widths & Spacing */
+.admin-layout .admin-table-borrows {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 780px;
+}
+
+.admin-layout .admin-table-borrows th {
+  padding: 12px 8px;
+}
+
+.admin-layout .admin-table-borrows td {
+  padding: 13px 8px;
+}
+
+.admin-layout .admin-table-borrows th:nth-child(1),
+.admin-layout .admin-table-borrows td:nth-child(1) { width: 7%; white-space: nowrap; }
+.admin-layout .admin-table-borrows th:nth-child(2),
+.admin-layout .admin-table-borrows td:nth-child(2) { width: 5%; white-space: nowrap; }
+.admin-layout .admin-table-borrows th:nth-child(3),
+.admin-layout .admin-table-borrows td:nth-child(3) { width: 18%; overflow-wrap: break-word; }
+.admin-layout .admin-table-borrows th:nth-child(4),
+.admin-layout .admin-table-borrows td:nth-child(4) { width: 9%; overflow-wrap: break-word; }
+.admin-layout .admin-table-borrows th:nth-child(5),
+.admin-layout .admin-table-borrows td:nth-child(5) { width: 10%; white-space: nowrap; }
+.admin-layout .admin-table-borrows th:nth-child(6),
+.admin-layout .admin-table-borrows td:nth-child(6) { width: 10%; white-space: nowrap; }
+.admin-layout .admin-table-borrows th:nth-child(7),
+.admin-layout .admin-table-borrows td:nth-child(7) { width: 10%; white-space: nowrap; }
+.admin-layout .admin-table-borrows th:nth-child(8),
+.admin-layout .admin-table-borrows td:nth-child(8) { width: 13%; text-align: center; }
+.admin-layout .admin-table-borrows th:nth-child(9),
+.admin-layout .admin-table-borrows td:nth-child(9) { width: 8%; white-space: nowrap; padding-left: 12px; text-align: left; }
+.admin-layout .admin-table-borrows th:nth-child(10),
+.admin-layout .admin-table-borrows td:nth-child(10) { width: 10%; }
+
+/* Ordered Book Info Table Column Widths & Spacing */
+.admin-layout .admin-table-orders {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 760px;
+}
+
+.admin-layout .admin-table-orders th {
+  padding: 12px 12px;
+}
+
+.admin-layout .admin-table-orders td {
+  padding: 14px 12px;
+}
+
+.admin-layout .admin-table-orders th:nth-child(1),
+.admin-layout .admin-table-orders td:nth-child(1) { width: 10%; }
+.admin-layout .admin-table-orders th:nth-child(2),
+.admin-layout .admin-table-orders td:nth-child(2) { width: 23%; overflow-wrap: break-word; }
+.admin-layout .admin-table-orders th:nth-child(3),
+.admin-layout .admin-table-orders td:nth-child(3) { width: 14%; overflow-wrap: break-word; }
+.admin-layout .admin-table-orders th:nth-child(4),
+.admin-layout .admin-table-orders td:nth-child(4) { width: 9%; white-space: nowrap; }
+.admin-layout .admin-table-orders th:nth-child(5),
+.admin-layout .admin-table-orders td:nth-child(5) { width: 14%; white-space: nowrap; }
+.admin-layout .admin-table-orders th:nth-child(6),
+.admin-layout .admin-table-orders td:nth-child(6) { width: 7%; white-space: nowrap; }
+.admin-layout .admin-table-orders th:nth-child(7),
+.admin-layout .admin-table-orders td:nth-child(7) { width: 10%; white-space: nowrap; }
+.admin-layout .admin-table-orders th:nth-child(8),
+.admin-layout .admin-table-orders td:nth-child(8) { width: 13%; overflow-wrap: break-word; }
+
 .admin-layout .table-search-input {
   padding: 9px 18px;
   border-radius: var(--radius-full);

@@ -323,7 +323,7 @@ export const updateUserCredentials = async (
     ON CONFLICT ("userID") DO UPDATE
     SET username = COALESCE(EXCLUDED.username, credentials.username),
         "passHash" = COALESCE(EXCLUDED."passHash", credentials."passHash"),
-        "lastLogin" = COALESCE(EXCLUDED."lastLogin", credentials."lastLogin")
+        "lastLogin" = COALESCE($4, credentials."lastLogin")
     RETURNING "userID", username, "lastLogin";
   `;
   const { rows } = await pool.query(query, [

@@ -627,7 +627,7 @@ export const deleteAdminBookData = async (req, res) => {
     if (!deletedBook) return res.status(404).json({ message: 'Book not found.' });
     return res.status(204).send();
   } catch (error) {
-    if (error.code === '23503') {
+    if (error.code === '23503' || error.code === '23001') {
       return res.status(409).json({ message: 'This book has borrowing or order history and cannot be removed.' });
     }
     return res.status(500).json({ message: error.message });

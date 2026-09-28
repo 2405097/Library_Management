@@ -116,6 +116,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [orderApprovalModal, setOrderApprovalModal] = useState(null);
   const [approvingBorrowID, setApprovingBorrowID] = useState(null);
   const [rejectingBorrowID, setRejectingBorrowID] = useState(null);
+  const [openBorrowActionID, setOpenBorrowActionID] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [changeBook, setChangeBook] = useState(null);
   const [changeForm, setChangeForm] = useState({ borrowDelta: 0, orderDelta: 0, price: "" });
@@ -143,6 +144,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const updateBorrowBookInfo = (value) => {
     setBorrowBookInfo(value);
     setBorrowPage(0);
+    setOpenBorrowActionID(null);
   };
   const updateOrderedBookInfo = (value) => {
     setOrderedBookInfo(value);
@@ -198,15 +200,19 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   }, []);
 
   useEffect(() => {
-    if (openOrderActionID === null) return undefined;
+    if (openOrderActionID === null && openBorrowActionID === null) return undefined;
 
     const handleOutsideClick = (event) => {
       if (!(event.target instanceof Element) || !event.target.closest('.order-action-menu')) {
         setOpenOrderActionID(null);
+        setOpenBorrowActionID(null);
       }
     };
     const handleEscape = (event) => {
-      if (event.key === 'Escape') setOpenOrderActionID(null);
+      if (event.key === 'Escape') {
+        setOpenOrderActionID(null);
+        setOpenBorrowActionID(null);
+      }
     };
 
     document.addEventListener('mousedown', handleOutsideClick);
@@ -215,7 +221,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [openOrderActionID]);
+  }, [openOrderActionID, openBorrowActionID]);
 
   const processReturn = async (borrowID) => {
     setReturningBorrowID(borrowID);
@@ -595,7 +601,6 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
       setEditAccountOpen(false);
     }
   };
-  const openAccountEditor = toggleAccountEditor;
 
   const saveAccount = async () => {
     const name = accountForm.name.trim();
@@ -1252,15 +1257,30 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                 onChange={(event) => {
                   setBorrowBookSearch(event.target.value);
                   setBorrowPage(0);
+                  setOpenBorrowActionID(null);
                 }}
               />
               {totalBorrowPages > 1 && (
                 <div className="pagination-controls" aria-label="Borrow table pagination">
-                  <button type="button" disabled={borrowPage === 0} onClick={() => setBorrowPage((page) => page - 1)}>
+                  <button
+                    type="button"
+                    disabled={borrowPage === 0}
+                    onClick={() => {
+                      setOpenBorrowActionID(null);
+                      setBorrowPage((page) => page - 1);
+                    }}
+                  >
                     ← Previous Page
                   </button>
                   <span>Page {borrowPage + 1} of {totalBorrowPages}</span>
-                  <button type="button" disabled={borrowPage >= totalBorrowPages - 1} onClick={() => setBorrowPage((page) => page + 1)}>
+                  <button
+                    type="button"
+                    disabled={borrowPage >= totalBorrowPages - 1}
+                    onClick={() => {
+                      setOpenBorrowActionID(null);
+                      setBorrowPage((page) => page + 1);
+                    }}
+                  >
                     Next Page →
                   </button>
                 </div>
@@ -1316,54 +1336,114 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                             Awaiting member request
                           </span>
                         ) : (item.status || "").toUpperCase() === "PENDING" ? (
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <div className="order-action-menu">
                             <button
                               type="button"
-                              className="btn btn-primary small-btn borrow-action-btn"
-                              style={{ lineHeight: 1.2, textAlign: "center" }}
+                              className="btn btn-secondary small-btn order-actions-trigger"
                               disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
-                              onClick={() => approveBorrow(item.borrowid || item.borrowID)}
+                              onClick={() => setOpenBorrowActionID((current) => current === (item.borrowid || item.borrowID) ? null : (item.borrowid || item.borrowID))}
+                              aria-haspopup="menu"
+                              aria-expanded={openBorrowActionID === (item.borrowid || item.borrowID)}
                             >
-                              {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : "Approve"}
+                              Actions <span className="order-actions-chevron" aria-hidden="true" />
                             </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary small-btn btn-danger-outline borrow-action-btn"
-                              disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
-                              onClick={() => rejectBorrow(item.borrowid || item.borrowID)}
-                            >
-                              {rejectingBorrowID === (item.borrowid || item.borrowID) ? "Rejecting..." : "Reject"}
-                            </button>
+                            {openBorrowActionID === (item.borrowid || item.borrowID) && (
+                              <div className="order-action-menu-list" role="menu">
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
+                                  onClick={() => {
+                                    setOpenBorrowActionID(null);
+                                    approveBorrow(item.borrowid || item.borrowID);
+                                  }}
+                                >
+                                  {approvingBorrowID === (item.borrowid || item.borrowID) ? "Approving..." : "Approve"}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="order-action-menu-danger"
+                                  disabled={approvingBorrowID === (item.borrowid || item.borrowID) || rejectingBorrowID === (item.borrowid || item.borrowID)}
+                                  onClick={() => {
+                                    setOpenBorrowActionID(null);
+                                    rejectBorrow(item.borrowid || item.borrowID);
+                                  }}
+                                >
+                                  {rejectingBorrowID === (item.borrowid || item.borrowID) ? "Rejecting..." : "Reject"}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : (item.status || "").toUpperCase() === "FINE_DUE" ? (
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <div className="order-action-menu">
                             <button
                               type="button"
-                              className="btn btn-primary small-btn borrow-action-btn"
+                              className="btn btn-secondary small-btn order-actions-trigger"
                               disabled={resolvingFineID === (item.borrowid || item.borrowID)}
-                              onClick={() => resolveFine(item.borrowid || item.borrowID, "RETURNED_WITH_FINE")}
+                              onClick={() => setOpenBorrowActionID((current) => current === (item.borrowid || item.borrowID) ? null : (item.borrowid || item.borrowID))}
+                              aria-haspopup="menu"
+                              aria-expanded={openBorrowActionID === (item.borrowid || item.borrowID)}
                             >
-                              {resolvingFineID === (item.borrowid || item.borrowID) ? "Saving..." : <>Returned<br />with fine</>}
+                              Actions <span className="order-actions-chevron" aria-hidden="true" />
                             </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary small-btn btn-danger-outline borrow-action-btn"
-                              disabled={resolvingFineID === (item.borrowid || item.borrowID)}
-                              onClick={() => resolveFine(item.borrowid || item.borrowID, "FINE_WAIVED")}
-                            >
-                              Fine waved
-                            </button>
+                            {openBorrowActionID === (item.borrowid || item.borrowID) && (
+                              <div className="order-action-menu-list" role="menu">
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  disabled={resolvingFineID === (item.borrowid || item.borrowID)}
+                                  onClick={() => {
+                                    setOpenBorrowActionID(null);
+                                    resolveFine(item.borrowid || item.borrowID, "RETURNED_WITH_FINE");
+                                  }}
+                                >
+                                  {resolvingFineID === (item.borrowid || item.borrowID) ? "Saving..." : "Returned with fine"}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="order-action-menu-danger"
+                                  disabled={resolvingFineID === (item.borrowid || item.borrowID)}
+                                  onClick={() => {
+                                    setOpenBorrowActionID(null);
+                                    resolveFine(item.borrowid || item.borrowID, "FINE_WAIVED");
+                                  }}
+                                >
+                                  Fine waived
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : ["BORROWED", "OVERDUE"].includes((item.status || "").toUpperCase()) ? (
-                          Boolean(item.returnRequested || item.returnrequested) ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary small-btn borrow-action-btn return-action-btn"
-                              disabled={returningBorrowID === (item.borrowid || item.borrowID)}
-                              onClick={() => processReturn(item.borrowid || item.borrowID)}
-                            >
-                              {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : <>Process<br />Return</>}
-                            </button>
+                          (item.returnRequested || item.returnrequested) ? (
+                            <div className="order-action-menu">
+                              <button
+                                type="button"
+                                className="btn btn-secondary small-btn order-actions-trigger"
+                                disabled={returningBorrowID === (item.borrowid || item.borrowID)}
+                                onClick={() => setOpenBorrowActionID((current) => current === (item.borrowid || item.borrowID) ? null : (item.borrowid || item.borrowID))}
+                                aria-haspopup="menu"
+                                aria-expanded={openBorrowActionID === (item.borrowid || item.borrowID)}
+                              >
+                                Actions <span className="order-actions-chevron" aria-hidden="true" />
+                              </button>
+                              {openBorrowActionID === (item.borrowid || item.borrowID) && (
+                                <div className="order-action-menu-list" role="menu">
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={returningBorrowID === (item.borrowid || item.borrowID)}
+                                    onClick={() => {
+                                      setOpenBorrowActionID(null);
+                                      processReturn(item.borrowid || item.borrowID);
+                                    }}
+                                  >
+                                    {returningBorrowID === (item.borrowid || item.borrowID) ? "Processing..." : "Process Return"}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <span style={{ fontSize: "0.82rem", color: "#666", fontStyle: "italic" }}>
                               Awaiting Return
@@ -1424,7 +1504,6 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Order Date</th>
                     <th>Quantity</th>
                     <th>Sold Price</th>
-                    <th>Publisher</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -1438,7 +1517,6 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{formatDate(item.orderedAt || item.ordered_at || item.orderdate || item.orderDate, "N/A")}</td>
                       <td>{item.quantity || 1}</td>
                       <td>{(item.status || "PENDING").toUpperCase() === "APPROVED" ? `TK ${Number(item.price || 0).toFixed(0)}` : "N/A"}</td>
-                      <td>{item.publisher_name || item.publisherName || "N/A"}</td>
                       <td>
                         {(item.status || "PENDING").toUpperCase() === "PENDING" ? (
                           <div className="order-action-menu">

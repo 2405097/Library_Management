@@ -742,16 +742,20 @@
 .admin-table-borrows {
   table-layout: fixed;
   width: 100%;
-  min-width: 1040px;
+  min-width: 780px;
+}
+.admin-table-borrows th,
+.admin-table-borrows td {
+  padding: 12px 8px;
 }
 .admin-table-borrows th:nth-child(1),
 .admin-table-borrows td:nth-child(1) {
-  width: 9%;
+  width: 7%;
   white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(2),
 .admin-table-borrows td:nth-child(2) {
-  width: 6%;
+  width: 5%;
   white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(3),
@@ -762,38 +766,50 @@
 }
 .admin-table-borrows th:nth-child(4),
 .admin-table-borrows td:nth-child(4) {
-  width: 12%;
+  width: 9%;
   overflow-wrap: break-word;
 }
 .admin-table-borrows th:nth-child(5),
 .admin-table-borrows td:nth-child(5) {
-  width: 11%;
+  width: 10%;
   white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(6),
 .admin-table-borrows td:nth-child(6) {
-  width: 11%;
+  width: 10%;
   white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(7),
 .admin-table-borrows td:nth-child(7) {
-  width: 11%;
+  width: 10%;
+  white-space: nowrap;
 }
 .admin-table-borrows th:nth-child(8),
 .admin-table-borrows td:nth-child(8) {
-  width: 8%;
-  white-space: nowrap;
+  width: 13%;
+  text-align: center;
 }
 .admin-table-borrows th:nth-child(9),
 .admin-table-borrows td:nth-child(9) {
-  width: 16%;
+  width: 8%;
+  white-space: nowrap;
+  padding-left: 12px;
+  text-align: left;
+}
+.admin-table-borrows th:nth-child(10),
+.admin-table-borrows td:nth-child(10) {
+  width: 10%;
 }
 
 /* Ordered Book Info Table Column Widths & Spacing */
 .admin-table-orders {
   table-layout: fixed;
   width: 100%;
-  min-width: 900px;
+  min-width: 760px;
+}
+.admin-table-orders th,
+.admin-table-orders td {
+  padding: 12px 12px;
 }
 .admin-table-orders th:nth-child(1),
 .admin-table-orders td:nth-child(1) {
@@ -801,7 +817,7 @@
 }
 .admin-table-orders th:nth-child(2),
 .admin-table-orders td:nth-child(2) {
-  width: 22%;
+  width: 23%;
   overflow-wrap: break-word;
 }
 .admin-table-orders th:nth-child(3),
@@ -811,29 +827,28 @@
 }
 .admin-table-orders th:nth-child(4),
 .admin-table-orders td:nth-child(4) {
-  width: 12%;
+  width: 9%;
   white-space: nowrap;
 }
 .admin-table-orders th:nth-child(5),
 .admin-table-orders td:nth-child(5) {
-  width: 8%;
+  width: 14%;
   white-space: nowrap;
 }
 .admin-table-orders th:nth-child(6),
 .admin-table-orders td:nth-child(6) {
-  width: 10%;
+  width: 7%;
   white-space: nowrap;
 }
 .admin-table-orders th:nth-child(7),
 .admin-table-orders td:nth-child(7) {
   width: 10%;
-  overflow-wrap: break-word;
+  white-space: nowrap;
 }
 .admin-table-orders th:nth-child(8),
 .admin-table-orders td:nth-child(8) {
-  width: 14%;
-  padding-left: 0;
-  text-align: left;
+  width: 13%;
+  overflow-wrap: break-word;
 }
 
 /* Member and admin table column widths */

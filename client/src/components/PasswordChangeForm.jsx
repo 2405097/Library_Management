@@ -7,13 +7,16 @@ export default function PasswordChangeForm({ userID }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const changePassword = async (event) => {
     event.preventDefault();
     setMessage("");
+    setIsError(false);
     if (newPassword !== confirmPassword) {
       setMessage("New passwords do not match.");
+      setIsError(true);
       return;
     }
 
@@ -35,8 +38,10 @@ export default function PasswordChangeForm({ userID }) {
       setNewPassword("");
       setConfirmPassword("");
       setMessage("Password changed successfully.");
+      setIsError(false);
     } catch (error) {
       setMessage(error.message);
+      setIsError(true);
     } finally {
       setSaving(false);
     }
@@ -50,6 +55,7 @@ export default function PasswordChangeForm({ userID }) {
         onClick={() => {
           setOpen((current) => !current);
           setMessage("");
+          setIsError(false);
         }}
         aria-expanded={open}
       >
@@ -89,7 +95,14 @@ export default function PasswordChangeForm({ userID }) {
               required
             />
           </label>
-          {message && <p className="password-change-message" role="status">{message}</p>}
+          {message && (
+            <p
+              className={`password-change-message ${isError ? "password-change-error" : "password-change-success"}`}
+              role={isError ? "alert" : "status"}
+            >
+              {message}
+            </p>
+          )}
           <button type="submit" className="btn btn-primary small-btn" disabled={saving}>
             {saving ? "Changing..." : "Update Password"}
           </button>
