@@ -6,6 +6,7 @@ import iconStar from "../assets/star.svg";
 import BookShelf from "./BookShelf";
 import BookPage from "./BookPage";
 import AccountDeletionDialog from "./AccountDeletionDialog";
+import PasswordChangeForm from "./PasswordChangeForm";
 import { SORT_OPTIONS, sortBooks } from "./bookSorting";
 
 const SEARCH_OPTIONS = [
@@ -105,6 +106,11 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
   const [selectedBook, setSelectedBook] = useState(null);
   const [selectedBookId, setSelectedBookId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profileEmail, setProfileEmail] = useState(user?.email || "");
+  const [profileForm, setProfileForm] = useState({ name: user?.name || "", email: user?.email || "" });
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [returningBorrowID, setReturningBorrowID] = useState(null);
   const [requestingWaitlistBorrowID, setRequestingWaitlistBorrowID] = useState(null);
   const [cancellingWaitlistID, setCancellingWaitlistID] = useState(null);
@@ -478,6 +484,40 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
     setDrawerOpen(false);
   };
 
+  const saveProfile = async () => {
+    const name = profileForm.name.trim();
+    const email = profileForm.email.trim().toLowerCase();
+    if (!name || !email || !/^\S+@\S+\.\S+$/.test(email)) {
+      window.alert("Enter a name and valid email address.");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const token = sessionStorage.getItem("library_token");
+      const response = await fetch(`/api/users/${user.userID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name, email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Could not update profile.");
+
+      const storedUser = JSON.parse(sessionStorage.getItem("library_user") || "{}");
+      sessionStorage.setItem("library_user", JSON.stringify({ ...storedUser, ...data }));
+      setProfileName(data.name || name);
+      setProfileEmail(data.email || email);
+      setEditProfileOpen(false);
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (!newReviewData.reportDetails.trim()) return;
@@ -657,7 +697,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
         </div>
 
         <div className="lib-nav-right">
-          <span className="lib-nav-username">{user.name}</span>
+          <span className="lib-nav-username">{profileName}</span>
           <div className="lib-hamburger-wrap" ref={drawerRef}>
             <button
               className="lib-hamburger"
@@ -672,7 +712,7 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             {drawerOpen && (
               <div className="lib-dropdown">
                 <div className="lib-dropdown-header">
-                  <strong>{user.name}</strong>
+                  <strong>{profileName}</strong>
                   <span className="badge-role-sm">{user.role}</span>
                 </div>
                 <hr className="lib-dropdown-divider" />
@@ -707,11 +747,42 @@ export default function Dashboard({ user, onLogout, onAccountDeleted }) {
             {/* User Info */}
             {activeSection === "user_info" && (
               <div>
+                <div className="member-profile-actions">
+                  <button
+                    type="button"
+                    className="member-profile-edit-trigger"
+                    onClick={() => {
+                      setProfileForm({ name: profileName, email: profileEmail });
+                      setEditProfileOpen((current) => !current);
+                    }}
+                    aria-expanded={editProfileOpen}
+                  >
+                    {editProfileOpen ? "Cancel editing" : "Edit Profile"}
+                  </button>
+                </div>
+                {editProfileOpen && (
+                  <div className="member-profile-edit-panel">
+                    <label>
+                      Name
+                      <input value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} autoComplete="name" />
+                    </label>
+                    <label>
+                      Email
+                      <input type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))} autoComplete="email" />
+                    </label>
+                    <div className="member-profile-edit-actions">
+                      <button type="button" className="member-profile-save" onClick={saveProfile} disabled={savingProfile}>
+                        {savingProfile ? "Saving..." : "Save Profile"}
+                      </button>
+                    </div>
+                    <PasswordChangeForm userID={user.userID} />
+                  </div>
+                )}
                 <div className="lib-info-grid">
                   {[
                     ["User ID", `#${user.userID}`],
-                    ["Name", user.name],
-                    ["Email", user.email],
+                    ["Name", profileName],
+                    ["Email", profileEmail],
                     ["Phone", user.phone || "—"],
                     ["Address", user.address || "—"],
                     ["Role", user.role || "MEMBER"],

@@ -338,6 +338,70 @@
   gap: 14px;
 }
 
+.member-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+
+.member-profile-edit-trigger,
+.member-profile-save {
+  border: 1px solid #315c50;
+  border-radius: 4px;
+  padding: 8px 13px;
+  background: #315c50;
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.member-profile-edit-trigger:hover,
+.member-profile-save:hover:not(:disabled) {
+  background: #1e4037;
+}
+
+.member-profile-save:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.member-profile-edit-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--border-warm);
+  border-radius: 6px;
+  background: var(--bg-parchment);
+}
+
+.member-profile-edit-panel > label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.member-profile-edit-panel > label input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-warm);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.member-profile-edit-actions,
+.member-profile-edit-panel > .password-change-section {
+  grid-column: 1 / -1;
+}
+
 .lib-info-card {
   background: var(--bg-parchment);
   border: 1px solid var(--border-warm);

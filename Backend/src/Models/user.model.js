@@ -1239,6 +1239,14 @@ export const updateAdminBook = async (bookID, borrowDelta, orderDelta, price) =>
   }
 };
 
+export const deleteAdminBook = async (bookID) => {
+  const { rows } = await pool.query(
+    'DELETE FROM book WHERE "bookID" = $1 RETURNING "bookID", title',
+    [bookID]
+  );
+  return rows[0] || null;
+};
+
 export const getAdminBookReviews = async () => {
   const query = `
     SELECT br."reviewID", br.rating, br.comment, br."createdAt", br."reviewSource",
@@ -1304,6 +1312,7 @@ export const getAdminOrders = async () => {
       o.quantity,
       o.status,
       o."approvedAt",
+      u."userID" AS member_id,
       COALESCE(u.name, 'Deleted user') AS member_name,
       b.title AS book_name,
       p."publisherName" AS publisher_name,
@@ -1314,7 +1323,7 @@ export const getAdminOrders = async () => {
     LEFT JOIN publisher p ON p."publisherID" = b."publisherID"
     LEFT JOIN book_author ba ON ba."bookID" = b."bookID"
     LEFT JOIN author a ON a."authorID" = ba."authorID"
-    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o."actualPrice", o."discountPercentage", o.price, o.quantity, o.status, o."approvedAt", u.name, b.title, p."publisherName"
+    GROUP BY o."purchaseNo", o."orderDate", o."orderedAt", o."actualPrice", o."discountPercentage", o.price, o.quantity, o.status, o."approvedAt", u."userID", u.name, b.title, p."publisherName"
     ORDER BY COALESCE(o."orderedAt", o."orderDate"::timestamp with time zone) DESC, o."purchaseNo" DESC;
   `;
   const { rows } = await pool.query(query);

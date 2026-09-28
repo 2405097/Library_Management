@@ -4,6 +4,7 @@ import {
   getUser,
   createNewUser,
   updateUserDetails,
+  changeOwnPassword,
   deleteOwnAccount,
   loginUser,
   logoutUser,
@@ -37,6 +38,7 @@ router.post('/', createNewUser);
 // ── Authenticated routes ────────────────────────────────────────────────────
 // POST /api/users/logout — revoke the current JWT (genuine server-side logout)
 router.post('/logout', authenticate, logoutUser);
+router.post('/:id/password', authenticate, changeOwnPassword);
 
 // ── Admin-only routes ───────────────────────────────────────────────────────
 // GET /api/users — list all users (ADMIN only)

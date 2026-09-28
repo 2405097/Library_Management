@@ -39,6 +39,7 @@ import {
   getAdminBorrowRecords,
   getAdminOrders,
   updateAdminBook,
+  deleteAdminBook,
   createOrder,
   approveOrder,
   rejectOrder,
@@ -210,6 +211,9 @@ export const createNewUser = async (req, res) => {
 export const updateUserDetails = async (req, res) => {
   try {
     const updatePayload = { ...req.body };
+    delete updatePayload.password;
+    delete updatePayload.passHash;
+    delete updatePayload.username;
     if (updatePayload.avatar !== undefined && req.user.role !== 'ADMIN') {
       delete updatePayload.avatar;
     }
@@ -235,6 +239,40 @@ export const updateUserDetails = async (req, res) => {
       return res.status(409).json({ message: 'That email address is already in use.' });
     }
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const changeOwnPassword = async (req, res) => {
+  try {
+    const requestedID = Number(req.params.id);
+    const { currentPassword, newPassword } = req.body || {};
+    if (!Number.isInteger(requestedID) || requestedID !== Number(req.user.userID)) {
+      return res.status(403).json({ message: 'You can only change your own password.' });
+    }
+    if (typeof currentPassword !== 'string' || !currentPassword
+      || typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ message: 'Current password and a new password of at least 8 characters are required.' });
+    }
+
+    const user = await findUserWithCredentialsById(requestedID);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const isBcryptHash = typeof user.passHash === 'string' && /^\$2[aby]\$/.test(user.passHash);
+    const passwordMatches = isBcryptHash
+      ? await bcrypt.compare(currentPassword, user.passHash)
+      : currentPassword === user.passHash;
+    if (!passwordMatches) {
+      return res.status(401).json({ message: 'The current password is incorrect.' });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: 'Choose a password different from your current password.' });
+    }
+
+    const passHash = await bcrypt.hash(newPassword, 10);
+    await updateUserCredentials(requestedID, { passHash });
+    return res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -575,6 +613,24 @@ export const updateAdminBookData = async (req, res) => {
     res.status(200).json({ message: 'Book details updated successfully.', book });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteAdminBookData = async (req, res) => {
+  try {
+    const bookID = Number(req.params.bookID);
+    if (!Number.isInteger(bookID) || bookID < 1) {
+      return res.status(400).json({ message: 'A valid book ID is required.' });
+    }
+
+    const deletedBook = await deleteAdminBook(bookID);
+    if (!deletedBook) return res.status(404).json({ message: 'Book not found.' });
+    return res.status(204).send();
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(409).json({ message: 'This book has borrowing or order history and cannot be removed.' });
+    }
+    return res.status(500).json({ message: error.message });
   }
 };
 

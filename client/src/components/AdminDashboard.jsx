@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./AdminDashboard.css";
 import AccountDeletionDialog from "./AccountDeletionDialog";
+import PasswordChangeForm from "./PasswordChangeForm";
 
 const renderTabIcon = (key) => {
   switch (key) {
@@ -119,6 +120,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
   const [changeBook, setChangeBook] = useState(null);
   const [changeForm, setChangeForm] = useState({ borrowDelta: 0, orderDelta: 0, price: "" });
   const [savingBook, setSavingBook] = useState(false);
+  const [deletingBook, setDeletingBook] = useState(false);
   const [newBookForm, setNewBookForm] = useState(EMPTY_NEW_BOOK_FORM);
   const [creatingBook, setCreatingBook] = useState(false);
   const [createBookError, setCreateBookError] = useState("");
@@ -468,6 +470,33 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
     }
   };
 
+  const removeBook = async () => {
+    if (!changeBook || deletingBook) return;
+    const bookID = changeBook.bookID || changeBook.bookid;
+    if (!window.confirm(`Remove "${changeBook.title}" from the book catalog?`)) return;
+
+    setDeletingBook(true);
+    try {
+      const token = sessionStorage.getItem('library_token');
+      const response = await fetch(`/api/admin/books/${bookID}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = response.status === 204 ? {} : await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not remove this book.');
+
+      updateBookInfo((current) => current.filter((book) => String(book.bookID || book.bookid) !== String(bookID)));
+      setSummary((current) => ({ ...current, total_books: Math.max(0, Number(current.total_books || 0) - 1) }));
+      setChangeBook(null);
+      setActiveTab("book_info");
+      window.alert('Book removed from the catalog.');
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setDeletingBook(false);
+    }
+  };
+
   const createBook = async (event) => {
     event.preventDefault();
     if (creatingBook) return;
@@ -790,7 +819,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
-                <span>{editAccountOpen ? "Cancel Editing" : "Edit Account"}</span>
+                <span>{editAccountOpen ? "Cancel Editing" : "Edit Profile"}</span>
               </button>
             </div>
 
@@ -798,14 +827,14 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
               <div className="account-edit-panel" id="account-edit-panel">
                 <div className="account-edit-heading">
                   <div>
-                    <h4>Edit Account Credentials</h4>
+                    <h4>Edit Profile</h4>
                     <p>Update the display name and email address used for this administrator account.</p>
                   </div>
                   <button
                     type="button"
                     className="account-edit-close-btn"
                     onClick={() => setEditAccountOpen(false)}
-                    aria-label="Close edit account"
+                    aria-label="Close edit profile"
                   >
                     ✕
                   </button>
@@ -842,6 +871,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     {savingAccount ? "Saving..." : "Save Account"}
                   </button>
                 </div>
+                <PasswordChangeForm userID={user.userID} />
               </div>
             )}
 
@@ -1199,7 +1229,12 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                 New book price (TK)
                 <input type="number" min="0" step="0.01" value={changeForm.price} onChange={(event) => setChangeForm((current) => ({ ...current, price: event.target.value }))} required />
               </label>
-              <button type="submit" className="btn btn-primary" disabled={savingBook}>{savingBook ? "Saving..." : "Save Changes"}</button>
+              <div className="book-change-actions">
+                <button type="button" className="btn btn-secondary btn-danger-outline" onClick={removeBook} disabled={savingBook || deletingBook}>
+                  {deletingBook ? "Removing..." : "Remove Book"}
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={savingBook || deletingBook}>{savingBook ? "Saving..." : "Save Changes"}</button>
+              </div>
             </form>
           </div>
         )}
@@ -1239,6 +1274,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Copy</th>
                     <th>Book</th>
                     <th>Member</th>
+                    <th>Member ID</th>
                     <th>Due Date</th>
                     <th>Return Date</th>
                     <th>Status</th>
@@ -1253,6 +1289,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.copyNumber ?? item.copynumber ?? "N/A"}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
+                      <td>{item.member_id ?? item.memberID ?? "N/A"}</td>
                       <td>
                         {(item.status || "").toUpperCase() === "PENDING"
                            ? "Upon approval"
@@ -1383,6 +1420,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                     <th>Purchase No</th>
                     <th>Book</th>
                     <th>Member</th>
+                    <th>Member ID</th>
                     <th>Order Date</th>
                     <th>Quantity</th>
                     <th>Sold Price</th>
@@ -1396,6 +1434,7 @@ export default function AdminDashboard({ user, onLogout, onAccountDeleted }) {
                       <td>{item.purchaseno ?? item.purchaseNo}</td>
                       <td>{item.book_name || item.bookName || "N/A"}</td>
                       <td>{item.member_name || item.memberName || "N/A"}</td>
+                      <td>{item.member_id ?? item.memberID ?? "N/A"}</td>
                       <td>{formatDate(item.orderedAt || item.ordered_at || item.orderdate || item.orderDate, "N/A")}</td>
                       <td>{item.quantity || 1}</td>
                       <td>{(item.status || "PENDING").toUpperCase() === "APPROVED" ? `TK ${Number(item.price || 0).toFixed(0)}` : "N/A"}</td>

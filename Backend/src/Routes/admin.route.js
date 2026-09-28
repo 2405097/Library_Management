@@ -4,6 +4,7 @@ import {
   getAdminBooksData,
   createAdminBookData,
   updateAdminBookData,
+  deleteAdminBookData,
   getAdminBookReviewsData,
   getAdminFeedbackData,
   getAdminBorrowData,
@@ -25,6 +26,7 @@ router.get('/summary', authenticate, authorize('ADMIN'), getAdminDashboardSummar
 router.get('/books', authenticate, authorize('ADMIN'), getAdminBooksData);
 router.post('/books', authenticate, authorize('ADMIN'), createAdminBookData);
 router.put('/books/:bookID', authenticate, authorize('ADMIN'), updateAdminBookData);
+router.delete('/books/:bookID', authenticate, authorize('ADMIN'), deleteAdminBookData);
 router.get('/book-reviews', authenticate, authorize('ADMIN'), getAdminBookReviewsData);
 router.get('/feedback', authenticate, authorize('ADMIN'), getAdminFeedbackData);
 router.post('/admin-signup-approvals/:id/approve', authenticate, authorize('ADMIN'), approveAdminSignup);

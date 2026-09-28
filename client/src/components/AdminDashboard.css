@@ -947,6 +947,13 @@
   gap: 12px;
 }
 
+.admin-layout .book-change-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .admin-layout .account-actions-row {
   display: flex;
   align-items: center;
