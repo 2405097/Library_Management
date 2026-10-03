@@ -351,6 +351,7 @@ export const updateLastLogin = async (userID) => {
 
 // ── Book search ─────────────────────────────────────────────────────────────
 
+//First complex query
 export const searchBooksByField = async (field, keyword) => {
   const isNumericField = field === "bookID" && !isNaN(Number(keyword));
   const searchValue = isNumericField ? keyword.trim() : `%${keyword}%`;
@@ -437,6 +438,8 @@ export const searchBooksByField = async (field, keyword) => {
 /**
  * Retrieve top popular books directly using database-level sorting and limit
  */
+
+//Second complex query
 export const getPopularBooks = async (limit = 10) => {
   const query = `
     SELECT
@@ -498,6 +501,8 @@ export const getPopularBooks = async (limit = 10) => {
 /**
  * Retrieve full book details by ID including stats from PostgreSQL function fn_get_book_rating_stats
  */
+
+//Third complex query
 export const getBookDetailsById = async (bookID) => {
   const query = `
     SELECT
@@ -986,6 +991,8 @@ export const createBookReview = async (userID, bookID, rating, comment) => {
   };
 };
 
+
+//Fourth complex query
 export const getOrdersByUserId = async (userID) => {
   const query = `
     SELECT
@@ -1089,6 +1096,8 @@ export const getAdminSummary = async () => {
   return rows[0] || {};
 };
 
+
+//Fifth complex query
 export const getAdminBooks = async () => {
   const query = `
     SELECT
@@ -1114,6 +1123,7 @@ export const getAdminBooks = async () => {
   return rows;
 };
 
+//Sixth complex query
 export const createAdminBook = async ({
   title,
   genre,
@@ -1300,6 +1310,7 @@ export const getAdminBorrowRecords = async () => {
   return rows;
 };
 
+//Seventh complex query
 export const getAdminOrders = async () => {
   const query = `
     SELECT
@@ -1377,6 +1388,8 @@ export const rejectOrder = async (purchaseNo) => {
   }
 };
 
+
+//Eighth complex query
 export const getWishlistByUserId = async (userID) => {
   const query = `
     SELECT
